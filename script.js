@@ -4,6 +4,7 @@ const productsContainer = document.getElementById("productsContainer");
 const selectedProductsList = document.getElementById("selectedProductsList");
 const generateRoutineButton = document.getElementById("generateRoutine");
 const routineOutput = document.getElementById("routineOutput");
+const saveRoutineButton = document.getElementById("saveRoutineBtn");
 const chatForm = document.getElementById("chatForm");
 const chatWindow = document.getElementById("chatWindow");
 const userInput = document.getElementById("userInput");
@@ -106,6 +107,68 @@ function renderRoutineEditorialSummary(summaryText) {
   routineOutput.appendChild(note);
 }
 
+/* Build routine text for download */
+function getRoutineTextForSave() {
+  const stepCards = routineOutput.querySelectorAll(".routine-step-card");
+
+  if (!stepCards.length) {
+    return "";
+  }
+
+  const lines = [
+    "L'Oreal Personalized Routine",
+    `Saved on: ${new Date().toLocaleString()}`,
+    "",
+    "Routine Steps",
+  ];
+
+  stepCards.forEach((card, index) => {
+    const title = card.querySelector(".routine-step-title")?.textContent?.trim() || "";
+    const brand = card.querySelector(".routine-step-brand")?.textContent?.trim() || "";
+    const guidance = card.querySelector(".routine-step-guidance")?.textContent?.trim() || "";
+
+    lines.push(`${index + 1}. ${title}`);
+    if (brand) {
+      lines.push(`   Brand: ${brand}`);
+    }
+    if (guidance) {
+      lines.push(`   ${guidance}`);
+    }
+    lines.push("");
+  });
+
+  const aiSummary = routineOutput.querySelector(".routine-ai-note")?.textContent?.trim() || "";
+  if (aiSummary) {
+    lines.push("AI Notes");
+    lines.push(aiSummary);
+  }
+
+  return lines.join("\n").trim();
+}
+
+/* Download the generated routine as a text file */
+function saveRoutineToFile() {
+  const routineText = getRoutineTextForSave();
+
+  if (!routineText) {
+    addChatMessage("ai", "Generate a routine first, then you can save it.");
+    return;
+  }
+
+  const blob = new Blob([routineText], { type: "text/plain;charset=utf-8" });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = downloadUrl;
+  link.download = `loreal-routine-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(downloadUrl);
+
+  addChatMessage("ai", "Your routine has been saved as a text file.");
+}
+
 /* Infer routine phase so products can be sorted in a practical order */
 function getRoutinePhase(product) {
   const category = product.category;
@@ -169,6 +232,7 @@ async function generatePersonalizedRoutine() {
     routineOutput.innerHTML = `
       <p class="routine-placeholder">Select at least one product to generate your personalized routine.</p>
     `;
+    saveRoutineButton.disabled = true;
     addChatMessage("ai", "Select a few products first and I will build your personalized routine flow.");
     return;
   }
@@ -191,6 +255,7 @@ async function generatePersonalizedRoutine() {
         .join("")}
     </div>
   `;
+  saveRoutineButton.disabled = false;
 
   try {
     const routineResponse = await sendToRoutineAdvisor(
@@ -335,6 +400,11 @@ addChatMessage("ai", "Welcome. Select products and generate your personalized be
 /* Generate button creates an editorial routine timeline */
 generateRoutineButton.addEventListener("click", () => {
   generatePersonalizedRoutine();
+});
+
+/* Save button downloads current routine */
+saveRoutineButton.addEventListener("click", () => {
+  saveRoutineToFile();
 });
 
 /* Chat form submission handler connected to Cloudflare Worker */

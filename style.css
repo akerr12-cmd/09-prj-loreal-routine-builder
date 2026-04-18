@@ -639,3 +639,32 @@ body {
   white-space: pre-line;
   line-height: 1.45;
 }
+
+.save-routine-btn {
+  margin-top: 16px;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background:
+    linear-gradient(#0d0d0d, #0d0d0d) padding-box,
+    linear-gradient(140deg, #e3a535, #f3e9d8) border-box;
+  color: #e3a535;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+.save-routine-btn:hover {
+  transform: translateY(-1px);
+}
+
+.save-routine-btn i {
+  margin-right: 6px;
+}
+
+.save-routine-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
