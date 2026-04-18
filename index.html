@@ -47,14 +47,25 @@
       <!-- Products Grid -->
       <div id="productsContainer" class="products-grid"></div>
 
-      <!-- Selected Products -->
-      <div class="selected-products">
-        <h2>Selected Products</h2>
-        <div id="selectedProductsList"></div>
+      <div class="products-actions">
+        <p id="selectedCountText" class="selected-count">Selected: 0 products</p>
+        <button id="saveSelectedProductsBtn" class="save-selected-btn" type="button">
+          Save Selected Products
+        </button>
         <button id="generateRoutine" class="generate-btn">
           <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Routine
         </button>
       </div>
+
+      <section class="curated-edit-section">
+        <div class="curated-edit-header">
+          <h2>Your Curated Edit</h2>
+          <button id="clearSavedProductsBtn" class="clear-all-btn" type="button">Clear All</button>
+        </div>
+        <div id="savedProductsGrid" class="saved-products-grid">
+          <p class="curated-edit-empty">Saved products will appear here.</p>
+        </div>
+      </section>
 
       <!-- Personalized Routine Output -->
       <section class="routine-section">

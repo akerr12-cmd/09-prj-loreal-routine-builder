@@ -40,22 +40,48 @@ body {
 .search-section {
   margin: 30px 0;
   display: flex;
+  position: relative;
 }
 
 .search-section select {
   width: 100%;
-  padding: 16px;
+  padding: 16px 46px 16px 16px;
   font-size: 18px;
-  border: 2px solid #000;
-  border-radius: 8px;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
   cursor: pointer;
-  background-color: white;
+  background:
+    linear-gradient(#faf9f7, #faf9f7) padding-box,
+    linear-gradient(140deg, #e3a535, #f3e9d8) border-box;
   font-weight: 500;
+  color: #1c1c1c;
+  appearance: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+
+.search-section::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-right: 1.5px solid #c6922a;
+  border-bottom: 1.5px solid #c6922a;
+  transform: translateY(-60%) rotate(45deg);
+  pointer-events: none;
 }
 
 .search-section select:focus {
   outline: none;
-  border-color: #666;
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.1),
+    inset 0 -2px 0 #ff003b;
+}
+
+.search-section select:hover {
+  transform: translateY(-1px);
 }
 
 /* chat section */
@@ -108,6 +134,55 @@ body {
   background: #0d0d0d;
   color: #faf9f7;
   border-left: 2px solid #ff003b;
+}
+
+.ingredient-accent {
+  color: #c6922a;
+  font-weight: 600;
+}
+
+.action-accent {
+  color: #ff003b;
+  font-weight: 600;
+}
+
+.thinking-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+}
+
+.thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e3a535;
+  opacity: 0.45;
+  animation: thinkingPulse 1s ease-in-out infinite;
+}
+
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes thinkingPulse {
+  0% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
 }
 
 /* placeholder message */
@@ -418,9 +493,50 @@ body {
   transform: scaleY(1);
 }
 
-/* selected products */
-.selected-products {
-  margin: 40px 0;
+/* products actions under unified grid */
+.products-actions {
+  margin: 6px 0 40px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.selected-count {
+  font-family: "Playfair Display", "Times New Roman", serif;
+  color: #c6922a;
+  font-size: 18px;
+  min-width: 190px;
+}
+
+.save-selected-btn {
+  padding: 12px 16px;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  background:
+    linear-gradient(#faf9f7, #faf9f7) padding-box,
+    linear-gradient(140deg, #e3a535, #f3e9d8) border-box;
+  color: #0d0d0d;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  white-space: nowrap;
+}
+
+.save-selected-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
+.save-selected-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.curated-edit-section {
+  margin: 0 0 40px;
   padding: 24px;
   border: 1.5px solid transparent;
   border-radius: 12px;
@@ -430,63 +546,91 @@ body {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
 }
 
-.selected-products h2 {
-  font-size: 20px;
-  margin-bottom: 20px;
-}
-
-#selectedProductsList {
+.curated-edit-header {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.selected-empty {
-  color: #777;
-  font-size: 15px;
-  padding: 8px 0;
-}
-
-.selected-item {
-  display: grid;
-  grid-template-columns: 28px 1fr auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(227, 165, 53, 0.25);
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
-.selected-item:last-child {
-  border-bottom: none;
-}
-
-.selected-step {
-  color: #c6922a;
-  font-weight: 700;
-  font-size: 16px;
-}
-
-.selected-product-name {
+.curated-edit-header h2 {
   font-family: "Playfair Display", "Times New Roman", serif;
-  font-size: 17px;
-  color: #222;
+  font-size: 22px;
+  color: #171717;
 }
 
-.remove-selected-btn {
+.clear-all-btn {
   border: none;
   background: transparent;
   color: #ff003b;
   font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
+  font-weight: 600;
   cursor: pointer;
-  padding: 2px 2px 0;
+  padding: 2px 0;
   text-decoration: none;
 }
 
-.remove-selected-btn:hover {
+.clear-all-btn:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.saved-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.curated-edit-empty {
+  color: #666;
+  font-size: 15px;
+}
+
+.saved-product-card {
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  padding: 14px;
+  background:
+    linear-gradient(#faf9f7, #faf9f7) padding-box,
+    linear-gradient(135deg, #e3a535, #f3e9d8) border-box;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 34px 70px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.saved-product-number {
+  color: #c6922a;
+  font-family: "Playfair Display", "Times New Roman", serif;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.saved-product-image {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+}
+
+.saved-product-info {
+  min-width: 0;
+}
+
+.saved-product-name {
+  font-family: "Playfair Display", "Times New Roman", serif;
+  font-size: 16px;
+  color: #171717;
+  margin-bottom: 4px;
+}
+
+.saved-product-brand {
+  color: #666;
+  font-size: 13px;
 }
 
 @media (max-width: 768px) {
@@ -503,7 +647,7 @@ body {
 
 .generate-btn {
   width: 100%;
-  margin-top: 20px;
+  margin-top: 0;
   padding: 16px;
   font-size: 18px;
   font-weight: 500;
@@ -515,6 +659,28 @@ body {
   position: relative;
   overflow: hidden;
   transition: color 150ms ease, transform 150ms ease;
+}
+
+@media (max-width: 640px) {
+  .products-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .selected-count {
+    min-width: 0;
+    text-align: center;
+  }
+
+  .curated-edit-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .saved-product-card {
+    grid-template-columns: 28px 60px 1fr;
+  }
 }
 
 .generate-btn:hover {

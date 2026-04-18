@@ -1,19 +1,30 @@
 /* Get references to DOM elements */
 const categoryFilter = document.getElementById("categoryFilter");
 const productsContainer = document.getElementById("productsContainer");
-const selectedProductsList = document.getElementById("selectedProductsList");
+const selectedCountText = document.getElementById("selectedCountText");
+const saveSelectedProductsButton = document.getElementById("saveSelectedProductsBtn");
 const generateRoutineButton = document.getElementById("generateRoutine");
 const routineOutput = document.getElementById("routineOutput");
 const saveRoutineButton = document.getElementById("saveRoutineBtn");
+const savedProductsGrid = document.getElementById("savedProductsGrid");
+const clearSavedProductsButton = document.getElementById("clearSavedProductsBtn");
 const chatForm = document.getElementById("chatForm");
 const chatWindow = document.getElementById("chatWindow");
 const userInput = document.getElementById("userInput");
 const apiUrl = typeof OPENAI_API_URL === "string" ? OPENAI_API_URL : "";
 
+const savedProductsStorageKey = "loreal-curated-edit";
+
 let currentProducts = [];
 let selectedProducts = [];
+let savedProducts = [];
 let expandedProducts = [];
 let conversationThreadId = "";
+let beautyPreferences = {
+  skinType: "",
+  sensitivity: false,
+  concerns: [],
+};
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -29,13 +40,151 @@ async function loadProducts() {
   return data.products;
 }
 
+/* Load saved curated edit items from localStorage */
+function loadSavedProducts() {
+  try {
+    const storedValue = localStorage.getItem(savedProductsStorageKey);
+    savedProducts = storedValue ? JSON.parse(storedValue) : [];
+  } catch (error) {
+    savedProducts = [];
+  }
+
+  if (!Array.isArray(savedProducts)) {
+    savedProducts = [];
+  }
+}
+
+/* Save curated edit items to localStorage */
+function persistSavedProducts() {
+  localStorage.setItem(savedProductsStorageKey, JSON.stringify(savedProducts));
+}
+
+/* Escape user-facing text before inserting in HTML */
+function escapeHtml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/* Add editorial micro-accents to AI chat text */
+function formatEditorialChatText(text) {
+  let formatted = escapeHtml(text).replace(/\n/g, "<br>");
+  const ingredientPatterns = [
+    "hyaluronic acid",
+    "niacinamide",
+    "ceramides",
+    "retinol",
+    "salicylic acid",
+    "vitamin c",
+    "peptides",
+    "glycolic acid",
+    "lactic acid",
+    "squalane",
+    "aha",
+    "bha",
+  ];
+
+  ingredientPatterns.forEach((ingredient) => {
+    const regex = new RegExp(`\\b(${ingredient.replace(/\s+/g, "\\s+")})\\b`, "gi");
+    formatted = formatted.replace(regex, '<span class="ingredient-accent">$1</span>');
+  });
+
+  formatted = formatted.replace(/\b(Apply|Avoid|Layer)\b/gi, '<span class="action-accent">$1</span>');
+  return formatted;
+}
+
 /* Add a styled chat bubble to the chat window */
 function addChatMessage(sender, message) {
   const bubble = document.createElement("div");
   bubble.className = `chat-bubble ${sender}`;
-  bubble.textContent = message;
+
+  if (sender === "ai") {
+    bubble.innerHTML = formatEditorialChatText(message);
+  } else {
+    bubble.textContent = message;
+  }
+
   chatWindow.appendChild(bubble);
   chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+/* Show subtle gold thinking dots while waiting for AI reply */
+function showThinkingIndicator() {
+  removeThinkingIndicator();
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble ai thinking-bubble";
+  bubble.id = "thinkingBubble";
+  bubble.setAttribute("aria-label", "Assistant is thinking");
+  bubble.innerHTML = `
+    <span class="thinking-dot"></span>
+    <span class="thinking-dot"></span>
+    <span class="thinking-dot"></span>
+  `;
+  chatWindow.appendChild(bubble);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+/* Remove temporary thinking indicator */
+function removeThinkingIndicator() {
+  const thinkingBubble = document.getElementById("thinkingBubble");
+  if (thinkingBubble) {
+    thinkingBubble.remove();
+  }
+}
+
+/* Store lightweight preference memory from user wording */
+function updateBeautyPreferencesFromMessage(message) {
+  const text = String(message || "").toLowerCase();
+
+  if (text.includes("dry skin")) {
+    beautyPreferences.skinType = "dry";
+  }
+  if (text.includes("oily skin")) {
+    beautyPreferences.skinType = "oily";
+  }
+  if (text.includes("combination skin")) {
+    beautyPreferences.skinType = "combination";
+  }
+  if (text.includes("sensitive")) {
+    beautyPreferences.sensitivity = true;
+  }
+
+  const concernKeywords = [
+    "acne",
+    "dark spots",
+    "hydration",
+    "fine lines",
+    "frizz",
+    "dullness",
+    "redness",
+    "anti-aging",
+  ];
+
+  concernKeywords.forEach((keyword) => {
+    if (text.includes(keyword) && !beautyPreferences.concerns.includes(keyword)) {
+      beautyPreferences.concerns.push(keyword);
+    }
+  });
+}
+
+/* Convert stored preferences into a concise context string */
+function getPreferenceSummary() {
+  const parts = [];
+
+  if (beautyPreferences.skinType) {
+    parts.push(`skin type: ${beautyPreferences.skinType}`);
+  }
+  if (beautyPreferences.sensitivity) {
+    parts.push("sensitive skin");
+  }
+  if (beautyPreferences.concerns.length) {
+    parts.push(`key concerns: ${beautyPreferences.concerns.join(", ")}`);
+  }
+
+  return parts.join(" | ");
 }
 
 /* Convert selected product objects into a clean API payload */
@@ -54,6 +203,7 @@ function getConversationPayload() {
   const bubbles = chatWindow.querySelectorAll(".chat-bubble");
 
   return Array.from(bubbles)
+    .filter((bubble) => !bubble.classList.contains("thinking-bubble"))
     .map((bubble) => ({
       role: bubble.classList.contains("user") ? "user" : "assistant",
       content: bubble.textContent ? bubble.textContent.trim() : "",
@@ -78,6 +228,7 @@ async function sendToRoutineAdvisor(mode, message) {
       threadId: conversationThreadId,
       products: getSelectedProductsPayload(),
       conversation: getConversationPayload(),
+      preferences: getPreferenceSummary(),
     }),
   });
 
@@ -105,6 +256,83 @@ function renderRoutineEditorialSummary(summaryText) {
   note.className = "routine-ai-note";
   note.textContent = summaryText;
   routineOutput.appendChild(note);
+}
+
+/* Keep selected count visible in the unified products area */
+function updateSelectedCount() {
+  if (!selectedCountText) {
+    return;
+  }
+
+  const count = selectedProducts.length;
+  selectedCountText.textContent = `Selected: ${count} product${count === 1 ? "" : "s"}`;
+}
+
+/* Keep the save button aligned with selection state */
+function updateSaveSelectedButtonState() {
+  if (!saveSelectedProductsButton) {
+    return;
+  }
+
+  saveSelectedProductsButton.disabled = selectedProducts.length === 0;
+}
+
+/* Render saved products in the curated edit panel */
+function renderSavedProducts() {
+  if (!savedProductsGrid) {
+    return;
+  }
+
+  if (savedProducts.length === 0) {
+    savedProductsGrid.innerHTML = `
+      <p class="curated-edit-empty">Saved products will appear here.</p>
+    `;
+    return;
+  }
+
+  savedProductsGrid.innerHTML = savedProducts
+    .map(
+      (product) => `
+        <article class="saved-product-card">
+          <span class="saved-product-number">${product.id}</span>
+          <img src="${product.image}" alt="${product.name}" class="saved-product-image">
+          <div class="saved-product-info">
+            <h3 class="saved-product-name">${product.name}</h3>
+            <p class="saved-product-brand">${product.brand}</p>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+/* Save selected products into the curated edit panel */
+function saveSelectedProductsToCuratedEdit() {
+  if (selectedProducts.length === 0) {
+    addChatMessage("ai", "Select products first, then save them to Your Curated Edit.");
+    return;
+  }
+
+  const savedIds = new Set(savedProducts.map((product) => product.id));
+  const additions = selectedProducts.filter((product) => !savedIds.has(product.id));
+
+  if (!additions.length) {
+    addChatMessage("ai", "Those products are already in Your Curated Edit.");
+    return;
+  }
+
+  savedProducts = [...additions, ...savedProducts];
+  persistSavedProducts();
+  renderSavedProducts();
+  addChatMessage("ai", "Your curated edit has been updated.");
+}
+
+/* Clear the curated edit panel */
+function clearSavedProducts() {
+  savedProducts = [];
+  persistSavedProducts();
+  renderSavedProducts();
+  addChatMessage("ai", "Your curated edit has been cleared.");
 }
 
 /* Build routine text for download */
@@ -258,44 +486,23 @@ async function generatePersonalizedRoutine() {
   saveRoutineButton.disabled = false;
 
   try {
+    showThinkingIndicator();
     const routineResponse = await sendToRoutineAdvisor(
       "generate_routine",
       "Please generate my personalized routine using only my selected products."
     );
+    removeThinkingIndicator();
 
     const advisorText = routineResponse.content || "Your routine is ready in the editorial timeline above.";
     addChatMessage("ai", advisorText);
     renderRoutineEditorialSummary(advisorText);
   } catch (error) {
+    removeThinkingIndicator();
     addChatMessage(
       "ai",
       `I couldn't generate the AI routine details right now. ${error.message}`
     );
   }
-}
-
-/* Render selected products as an editorial vertical list */
-function renderSelectedProducts() {
-  if (selectedProducts.length === 0) {
-    selectedProductsList.innerHTML = `
-      <p class="selected-empty">No products selected yet</p>
-    `;
-    return;
-  }
-
-  selectedProductsList.innerHTML = selectedProducts
-    .map(
-      (product, index) => `
-      <div class="selected-item">
-        <span class="selected-step">${index + 1}</span>
-        <p class="selected-product-name">${product.name}</p>
-        <button class="remove-selected-btn" data-id="${product.id}" aria-label="Remove ${product.name}">
-          x
-        </button>
-      </div>
-    `
-    )
-    .join("");
 }
 
 /* Create HTML for displaying product cards */
@@ -351,7 +558,8 @@ function toggleSelectedProduct(productId) {
   }
 
   displayProducts(currentProducts);
-  renderSelectedProducts();
+  updateSelectedCount();
+  updateSaveSelectedButtonState();
 }
 
 /* Filter and display products when category changes */
@@ -367,7 +575,8 @@ categoryFilter.addEventListener("change", async (e) => {
 
   currentProducts = filteredProducts;
   displayProducts(currentProducts);
-  renderSelectedProducts();
+  updateSelectedCount();
+  updateSaveSelectedButtonState();
 });
 
 /* Handle product card click for selecting products */
@@ -382,24 +591,26 @@ productsContainer.addEventListener("click", (e) => {
   toggleExpandedProduct(productId);
 });
 
-/* Handle remove button click in selected products list */
-selectedProductsList.addEventListener("click", (e) => {
-  const removeButton = e.target.closest(".remove-selected-btn");
-  if (!removeButton) {
-    return;
-  }
-
-  const productId = Number(removeButton.dataset.id);
-  toggleSelectedProduct(productId);
-});
-
-renderSelectedProducts();
+updateSelectedCount();
+updateSaveSelectedButtonState();
+loadSavedProducts();
+renderSavedProducts();
 
 addChatMessage("ai", "Welcome. Select products and generate your personalized beauty routine.");
 
 /* Generate button creates an editorial routine timeline */
 generateRoutineButton.addEventListener("click", () => {
   generatePersonalizedRoutine();
+});
+
+/* Save selected products to curated edit */
+saveSelectedProductsButton.addEventListener("click", () => {
+  saveSelectedProductsToCuratedEdit();
+});
+
+/* Clear curated edit */
+clearSavedProductsButton.addEventListener("click", () => {
+  clearSavedProducts();
 });
 
 /* Save button downloads current routine */
@@ -417,12 +628,16 @@ chatForm.addEventListener("submit", async (e) => {
   }
 
   addChatMessage("user", message);
+  updateBeautyPreferencesFromMessage(message);
   userInput.value = "";
 
   try {
+    showThinkingIndicator();
     const chatResponse = await sendToRoutineAdvisor("follow_up", message);
+    removeThinkingIndicator();
     addChatMessage("ai", chatResponse.content || "I can help refine your beauty routine.");
   } catch (error) {
+    removeThinkingIndicator();
     addChatMessage("ai", `I couldn't connect to the routine advisor right now. ${error.message}`);
   }
 });

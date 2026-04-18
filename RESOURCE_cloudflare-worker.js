@@ -33,6 +33,7 @@ export default {
     const userMessage = typeof requestBody.message === 'string' ? requestBody.message.trim() : '';
     const threadId = typeof requestBody.threadId === 'string' ? requestBody.threadId : '';
     const mode = requestBody.mode === 'generate_routine' ? 'generate_routine' : 'follow_up';
+    const preferences = typeof requestBody.preferences === 'string' ? requestBody.preferences.trim() : '';
 
     if (!apiKey || !assistantId) {
       return new Response(JSON.stringify({ error: { message: 'Missing OPENAI_API_KEY or ASSISTANT_ID in Cloudflare Worker secrets.' } }), { status: 500, headers: corsHeaders });
@@ -193,7 +194,7 @@ export default {
         .filter((item) => item.content);
     }
 
-    function buildRuntimeInstructions(modeValue, productsValue, conversationValue) {
+    function buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary) {
       const lines = [
         'Runtime context from app:',
         `mode=${modeValue}`,
@@ -205,6 +206,10 @@ export default {
 
       if (conversationValue.length) {
         lines.push('recent_conversation_json=' + JSON.stringify(conversationValue));
+      }
+
+      if (preferenceSummary) {
+        lines.push('user_preference_summary=' + preferenceSummary);
       }
 
       lines.push('When mode=generate_routine, use only selected_products_json for routine product steps.');
@@ -457,7 +462,7 @@ export default {
     }
 
     try {
-      const runtimeInstructions = buildRuntimeInstructions(mode, selectedProducts, conversation);
+      const runtimeInstructions = buildRuntimeInstructions(mode, selectedProducts, conversation, preferences);
       let activeThreadId = threadId;
 
       if (!activeThreadId) {
