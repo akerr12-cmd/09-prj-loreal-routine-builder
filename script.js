@@ -2,6 +2,8 @@
 const categoryFilter = document.getElementById("categoryFilter");
 const productSearch = document.getElementById("productSearch");
 const productsContainer = document.getElementById("productsContainer");
+const productsCarouselPrev = document.getElementById("productsCarouselPrev");
+const productsCarouselNext = document.getElementById("productsCarouselNext");
 const selectedCountText = document.getElementById("selectedCountText");
 const saveSelectedProductsButton = document.getElementById("saveSelectedProductsBtn");
 const generateRoutineButton = document.getElementById("generateRoutine");
@@ -46,6 +48,101 @@ let beautyPreferences = {
   concerns: [],
 };
 let searchQuery = "";
+let isCarouselDragging = false;
+let carouselDragStartX = 0;
+let carouselDragStartScrollLeft = 0;
+let carouselPointerId = null;
+let suppressProductClickOnce = false;
+
+/* Scroll product carousel by one card track */
+function scrollProductCarousel(direction) {
+  if (!productsContainer) {
+    return;
+  }
+
+  const firstCard = productsContainer.querySelector(".product-card");
+  const cardWidth = firstCard ? firstCard.getBoundingClientRect().width : 280;
+  const carouselGap = 20;
+  const step = cardWidth + carouselGap;
+  const isRtl = document.documentElement.getAttribute("dir") === "rtl";
+  const signedDirection = isRtl ? -direction : direction;
+
+  productsContainer.scrollBy({
+    left: signedDirection * step,
+    behavior: "smooth",
+  });
+}
+
+/* Start carousel drag interaction for touch and mouse */
+function handleCarouselPointerDown(event) {
+  if (!productsContainer || productsContainer.querySelectorAll(".product-card").length === 0) {
+    return;
+  }
+
+  if (event.pointerType === "mouse" && event.button !== 0) {
+    return;
+  }
+
+  isCarouselDragging = true;
+  carouselPointerId = event.pointerId;
+  carouselDragStartX = event.clientX;
+  carouselDragStartScrollLeft = productsContainer.scrollLeft;
+  productsContainer.classList.add("is-dragging");
+  productsContainer.setPointerCapture(event.pointerId);
+}
+
+/* Move carousel while dragging */
+function handleCarouselPointerMove(event) {
+  if (!isCarouselDragging || carouselPointerId !== event.pointerId || !productsContainer) {
+    return;
+  }
+
+  const deltaX = event.clientX - carouselDragStartX;
+  const hasMovedEnough = Math.abs(deltaX) > 6;
+
+  if (hasMovedEnough) {
+    suppressProductClickOnce = true;
+  }
+
+  productsContainer.scrollLeft = carouselDragStartScrollLeft - deltaX;
+
+  if (hasMovedEnough) {
+    event.preventDefault();
+  }
+}
+
+/* End carousel drag interaction */
+function handleCarouselPointerUp(event) {
+  if (carouselPointerId !== event.pointerId || !productsContainer) {
+    return;
+  }
+
+  isCarouselDragging = false;
+  carouselPointerId = null;
+  productsContainer.classList.remove("is-dragging");
+
+  if (productsContainer.hasPointerCapture(event.pointerId)) {
+    productsContainer.releasePointerCapture(event.pointerId);
+  }
+
+  updateCarouselControlsState();
+}
+
+/* Show/hide and enable/disable carousel controls based on card availability */
+function updateCarouselControlsState() {
+  if (!productsCarouselPrev || !productsCarouselNext || !productsContainer) {
+    return;
+  }
+
+  const hasCards = productsContainer.querySelectorAll(".product-card").length > 0;
+  const hasOverflow = productsContainer.scrollWidth > productsContainer.clientWidth + 4;
+  const shouldShowControls = hasCards;
+
+  productsCarouselPrev.hidden = !shouldShowControls;
+  productsCarouselNext.hidden = !shouldShowControls;
+  productsCarouselPrev.disabled = !hasOverflow;
+  productsCarouselNext.disabled = !hasOverflow;
+}
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -601,6 +698,9 @@ function displayProducts(products) {
   `
     )
     .join("");
+
+  productsContainer.scrollTo({ left: 0, behavior: "auto" });
+  updateCarouselControlsState();
 }
 
 /* Update search query and re-render product cards */
@@ -662,8 +762,37 @@ productSearch.addEventListener("input", (e) => {
   handleProductSearch(e.target.value);
 });
 
+/* Carousel controls */
+if (productsCarouselPrev && productsCarouselNext) {
+  productsCarouselPrev.addEventListener("click", () => {
+    scrollProductCarousel(-1);
+  });
+
+  productsCarouselNext.addEventListener("click", () => {
+    scrollProductCarousel(1);
+  });
+}
+
+/* Drag to scroll carousel on touch and mouse */
+if (productsContainer) {
+  productsContainer.addEventListener("pointerdown", handleCarouselPointerDown);
+  productsContainer.addEventListener("pointermove", handleCarouselPointerMove);
+  productsContainer.addEventListener("pointerup", handleCarouselPointerUp);
+  productsContainer.addEventListener("pointercancel", handleCarouselPointerUp);
+  productsContainer.addEventListener("scroll", updateCarouselControlsState, { passive: true });
+}
+
+window.addEventListener("resize", () => {
+  updateCarouselControlsState();
+});
+
 /* Handle product card click for selecting products */
 productsContainer.addEventListener("click", (e) => {
+  if (suppressProductClickOnce) {
+    suppressProductClickOnce = false;
+    return;
+  }
+
   const card = e.target.closest(".product-card");
   if (!card) {
     return;
@@ -678,6 +807,7 @@ updateSelectedCount();
 updateSaveSelectedButtonState();
 loadSavedProducts();
 renderSavedProducts();
+updateCarouselControlsState();
 
 addChatMessage("ai", "Welcome. Select products and generate your personalized beauty routine.");
 

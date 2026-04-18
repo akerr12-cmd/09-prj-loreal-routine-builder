@@ -22,10 +22,17 @@
 
   <body>
     <div class="page-wrapper">
+      <div class="beauty-genome-spine" aria-hidden="true"></div>
+
       <!------- Header / Branding ------->
       <header class="site-header">
-        <img src="img/loreal-logo.png" alt="L'Oréal Logo" class="logo" />
-        <h1 class="site-title">Smart Routine &amp; Product Advisor</h1>
+        <div class="hero-panel">
+          <img src="img/loreal-logo.png" alt="L'Oréal Logo" class="logo" />
+          <h1 class="site-title">
+            Smart Routine &amp; Product Advisor
+            <span class="hero-signal-dot" aria-hidden="true"></span>
+          </h1>
+        </div>
       </header>
 
       <!-- Category Filter -->
@@ -55,8 +62,16 @@
         />
       </div>
 
-      <!-- Products Grid -->
-      <div id="productsContainer" class="products-grid"></div>
+      <!-- Products Carousel -->
+      <section class="products-carousel" aria-label="Product carousel">
+        <button id="productsCarouselPrev" class="carousel-nav carousel-nav-prev" type="button" aria-label="Show previous products">
+          <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+        </button>
+        <div id="productsContainer" class="products-grid" tabindex="0"></div>
+        <button id="productsCarouselNext" class="carousel-nav carousel-nav-next" type="button" aria-label="Show next products">
+          <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+        </button>
+      </section>
 
       <div class="products-actions">
         <p id="selectedCountText" class="selected-count">Selected: 0 products</p>
