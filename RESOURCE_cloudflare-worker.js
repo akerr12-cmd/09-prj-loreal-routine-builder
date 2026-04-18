@@ -17,6 +17,9 @@ export default {
 
     const apiKey = env.OPENAI_API_KEY;
     const assistantId = env.ASSISTANT_ID;
+    const webSearchModel = typeof env.WEB_SEARCH_MODEL === 'string' && env.WEB_SEARCH_MODEL.trim()
+      ? env.WEB_SEARCH_MODEL.trim()
+      : 'gpt-4o-search-preview';
     const apiBase = 'https://api.openai.com/v1';
 
     let requestBody;
@@ -35,8 +38,8 @@ export default {
     const mode = requestBody.mode === 'generate_routine' ? 'generate_routine' : 'follow_up';
     const preferences = typeof requestBody.preferences === 'string' ? requestBody.preferences.trim() : '';
 
-    if (!apiKey || !assistantId) {
-      return new Response(JSON.stringify({ error: { message: 'Missing OPENAI_API_KEY or ASSISTANT_ID in Cloudflare Worker secrets.' } }), { status: 500, headers: corsHeaders });
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: { message: 'Missing OPENAI_API_KEY in Cloudflare Worker secrets.' } }), { status: 500, headers: corsHeaders });
     }
 
     const selectedProducts = normalizeSelectedProducts(requestBody.products);
@@ -48,16 +51,21 @@ export default {
       return new Response(JSON.stringify({ error: { message: 'Missing user message.' } }), { status: 400, headers: corsHeaders });
     }
 
-    const openAiHeaders = {
+    const openAiAssistantsHeaders = {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'OpenAI-Beta': 'assistants=v2'
     };
 
+    const openAiResponsesHeaders = {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    };
+
     async function createThread() {
       const response = await fetch(`${apiBase}/threads`, {
         method: 'POST',
-        headers: openAiHeaders,
+        headers: openAiAssistantsHeaders,
         body: '{}',
       });
 
@@ -73,7 +81,7 @@ export default {
     async function addMessage(activeThreadId) {
       const response = await fetch(`${apiBase}/threads/${activeThreadId}/messages`, {
         method: 'POST',
-        headers: openAiHeaders,
+        headers: openAiAssistantsHeaders,
         body: JSON.stringify({
           role: 'user',
           content: assistantPrompt,
@@ -100,7 +108,7 @@ export default {
 
       const response = await fetch(`${apiBase}/threads/${activeThreadId}/runs`, {
         method: 'POST',
-        headers: openAiHeaders,
+        headers: openAiAssistantsHeaders,
         body: JSON.stringify(runBody),
       });
 
@@ -116,7 +124,7 @@ export default {
     async function getRun(activeThreadId, runId) {
       const response = await fetch(`${apiBase}/threads/${activeThreadId}/runs/${runId}`, {
         method: 'GET',
-        headers: openAiHeaders,
+        headers: openAiAssistantsHeaders,
       });
 
       const data = await response.json();
@@ -131,7 +139,7 @@ export default {
     async function getLatestAssistantMessage(activeThreadId, runId) {
       const response = await fetch(`${apiBase}/threads/${activeThreadId}/messages?limit=20`, {
         method: 'GET',
-        headers: openAiHeaders,
+        headers: openAiAssistantsHeaders,
       });
 
       const data = await response.json();
@@ -222,8 +230,167 @@ export default {
       lines.push('Do not begin with any greeting or preface. Line 2 must begin the routine steps or section headers.');
       lines.push('When the user asks for a cleanser or any product recommendation, choose a specific product from product_catalog_json and name it explicitly; do not answer with a generic category only.');
       lines.push('Prefer recommendations that match the user’s stated concerns and the available catalog items.');
+      lines.push('Use live web search for current information (launches, research, ingredients, usage guidance) when relevant.');
+      lines.push('When using current information, include source links in a final "Sources:" section.');
 
       return lines.join('\n');
+    }
+
+    function buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      const lines = [];
+
+      lines.push('User request: ' + userPrompt);
+      lines.push('Mode: ' + modeValue);
+
+      if (productsValue.length) {
+        lines.push('Selected products JSON: ' + JSON.stringify(productsValue));
+      }
+
+      if (productCatalog.length) {
+        lines.push('Product catalog JSON: ' + JSON.stringify(productCatalog));
+      }
+
+      if (conversationValue.length) {
+        lines.push('Recent conversation JSON: ' + JSON.stringify(conversationValue));
+      }
+
+      if (preferenceSummary) {
+        lines.push('Preference summary: ' + preferenceSummary);
+      }
+
+      lines.push('Instructions:');
+      lines.push('- Use only items from Product catalog JSON when naming specific products.');
+      lines.push('- For mode=generate_routine, use only Selected products JSON for the routine product steps.');
+      lines.push('- For mode=generate_routine, first line must be exactly: "Based on your product selection, here is the routine our beauty advisors have put together for you."');
+      lines.push('- Use web search for current and factual details related to L\'Oréal products/routines when needed.');
+      lines.push('- End with a "Sources:" section and plain URL bullet points when web info is used.');
+
+      return lines.join('\n');
+    }
+
+    function extractWebCitations(responseData) {
+      const urls = [];
+      const seen = new Set();
+      const output = Array.isArray(responseData?.output) ? responseData.output : [];
+
+      for (let i = 0; i < output.length; i += 1) {
+        const contentBlocks = Array.isArray(output[i]?.content) ? output[i].content : [];
+
+        for (let j = 0; j < contentBlocks.length; j += 1) {
+          const annotations = Array.isArray(contentBlocks[j]?.annotations) ? contentBlocks[j].annotations : [];
+
+          for (let k = 0; k < annotations.length; k += 1) {
+            const url = String(annotations[k]?.url || '').trim();
+            if (!url) {
+              continue;
+            }
+
+            if (seen.has(url)) {
+              continue;
+            }
+
+            seen.add(url);
+            urls.push(url);
+
+            if (urls.length >= 8) {
+              return urls;
+            }
+          }
+        }
+      }
+
+      return urls;
+    }
+
+    function extractResponseText(responseData) {
+      const outputText = typeof responseData?.output_text === 'string' ? responseData.output_text.trim() : '';
+      if (outputText) {
+        return outputText;
+      }
+
+      const output = Array.isArray(responseData?.output) ? responseData.output : [];
+      const textParts = [];
+
+      for (let i = 0; i < output.length; i += 1) {
+        const contentBlocks = Array.isArray(output[i]?.content) ? output[i].content : [];
+
+        for (let j = 0; j < contentBlocks.length; j += 1) {
+          const block = contentBlocks[j] || {};
+          const textValue = typeof block?.text === 'string'
+            ? block.text
+            : String(block?.text?.value || '').trim();
+
+          if (textValue) {
+            textParts.push(textValue);
+          }
+        }
+      }
+
+      return textParts.join('\n\n').trim();
+    }
+
+    function appendSourcesIfMissing(text, citations) {
+      const cleanText = String(text || '').trim();
+      const links = Array.isArray(citations) ? citations.filter(Boolean) : [];
+
+      if (!links.length) {
+        return cleanText;
+      }
+
+      if (/\bSources\s*:/i.test(cleanText)) {
+        return cleanText;
+      }
+
+      const sourceLines = links.map((url) => `- ${url}`).join('\n');
+      return `${cleanText}\n\nSources:\n${sourceLines}`.trim();
+    }
+
+    async function createWebSearchResponse(runtimeInstructions, modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      const response = await fetch(`${apiBase}/responses`, {
+        method: 'POST',
+        headers: openAiResponsesHeaders,
+        body: JSON.stringify({
+          model: webSearchModel,
+          tools: [{ type: 'web_search_preview' }],
+          input: [
+            {
+              role: 'system',
+              content: [
+                {
+                  type: 'input_text',
+                  text: runtimeInstructions,
+                },
+              ],
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
+                },
+              ],
+            },
+          ],
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error?.message || 'Failed to create web search response.');
+      }
+
+      const content = extractResponseText(data);
+      if (!content) {
+        throw new Error('Web search response text was empty.');
+      }
+
+      const citations = extractWebCitations(data);
+      return {
+        content: appendSourcesIfMissing(content, citations),
+        citations,
+      };
     }
 
     function normalizeCatalog(products) {
@@ -512,42 +679,67 @@ export default {
     try {
       const runtimeInstructions = buildRuntimeInstructions(mode, selectedProducts, conversation, preferences);
       let activeThreadId = threadId;
+      let responseText = '';
+      let citations = [];
+      let usedWebSearch = false;
 
-      if (!activeThreadId) {
-        activeThreadId = await createThread();
-      }
+      try {
+        const webResult = await createWebSearchResponse(
+          runtimeInstructions,
+          mode,
+          selectedProducts,
+          conversation,
+          preferences,
+          assistantPrompt
+        );
 
-      await addMessage(activeThreadId);
-      const runId = await createRun(activeThreadId, runtimeInstructions);
-
-      let runData = await getRun(activeThreadId, runId);
-      let attempts = 0;
-
-      while (runData.status === 'queued' || runData.status === 'in_progress') {
-        if (attempts >= 15) {
-          throw new Error('Assistant response timed out.');
+        responseText = webResult.content;
+        citations = webResult.citations;
+        usedWebSearch = true;
+      } catch (webError) {
+        if (!assistantId) {
+          throw new Error(`Web search path failed and ASSISTANT_ID is missing for fallback. ${webError?.message || ''}`.trim());
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        runData = await getRun(activeThreadId, runId);
-        attempts += 1;
+        if (!activeThreadId) {
+          activeThreadId = await createThread();
+        }
+
+        await addMessage(activeThreadId);
+        const runId = await createRun(activeThreadId, runtimeInstructions);
+
+        let runData = await getRun(activeThreadId, runId);
+        let attempts = 0;
+
+        while (runData.status === 'queued' || runData.status === 'in_progress') {
+          if (attempts >= 15) {
+            throw new Error('Assistant response timed out.');
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          runData = await getRun(activeThreadId, runId);
+          attempts += 1;
+        }
+
+        if (runData.status !== 'completed') {
+          throw new Error(`Assistant run ended with status: ${runData.status}`);
+        }
+
+        responseText = await getLatestAssistantMessage(activeThreadId, runId);
       }
 
-      if (runData.status !== 'completed') {
-        throw new Error(`Assistant run ended with status: ${runData.status}`);
-      }
-
-      const assistantText = await getLatestAssistantMessage(activeThreadId, runId);
-      const structured = extractStructuredPayload(assistantText);
+      const structured = extractStructuredPayload(responseText);
       const finalContent = mode === 'generate_routine'
-        ? enforceGenerateRoutineOpening(structured.answer || assistantText)
-        : (structured.answer || assistantText);
+        ? enforceGenerateRoutineOpening(structured.answer || responseText)
+        : (structured.answer || responseText);
 
       return new Response(JSON.stringify({
-        threadId: activeThreadId,
+        threadId: activeThreadId || threadId || '',
         mode,
         content: finalContent,
         products: structured.products,
+        citations,
+        webSearchUsed: usedWebSearch,
       }), { headers: corsHeaders });
     } catch (error) {
       return new Response(JSON.stringify({

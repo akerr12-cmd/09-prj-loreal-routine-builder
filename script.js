@@ -53,6 +53,7 @@ let carouselDragStartX = 0;
 let carouselDragStartScrollLeft = 0;
 let carouselPointerId = null;
 let suppressProductClickOnce = false;
+let hasCarouselDragMoved = false;
 
 /* Scroll product carousel by one card track */
 function scrollProductCarousel(direction) {
@@ -87,8 +88,7 @@ function handleCarouselPointerDown(event) {
   carouselPointerId = event.pointerId;
   carouselDragStartX = event.clientX;
   carouselDragStartScrollLeft = productsContainer.scrollLeft;
-  productsContainer.classList.add("is-dragging");
-  productsContainer.setPointerCapture(event.pointerId);
+  hasCarouselDragMoved = false;
 }
 
 /* Move carousel while dragging */
@@ -98,32 +98,27 @@ function handleCarouselPointerMove(event) {
   }
 
   const deltaX = event.clientX - carouselDragStartX;
-  const hasMovedEnough = Math.abs(deltaX) > 6;
+  const hasMovedEnough = Math.abs(deltaX) > 8;
 
   if (hasMovedEnough) {
-    suppressProductClickOnce = true;
-  }
-
-  productsContainer.scrollLeft = carouselDragStartScrollLeft - deltaX;
-
-  if (hasMovedEnough) {
+    hasCarouselDragMoved = true;
+    productsContainer.classList.add("is-dragging");
+    productsContainer.scrollLeft = carouselDragStartScrollLeft - deltaX;
     event.preventDefault();
   }
 }
 
 /* End carousel drag interaction */
 function handleCarouselPointerUp(event) {
-  if (carouselPointerId !== event.pointerId || !productsContainer) {
+  if (!productsContainer || carouselPointerId !== event.pointerId) {
     return;
   }
 
   isCarouselDragging = false;
   carouselPointerId = null;
   productsContainer.classList.remove("is-dragging");
-
-  if (productsContainer.hasPointerCapture(event.pointerId)) {
-    productsContainer.releasePointerCapture(event.pointerId);
-  }
+  suppressProductClickOnce = hasCarouselDragMoved;
+  hasCarouselDragMoved = false;
 
   updateCarouselControlsState();
 }
@@ -219,7 +214,12 @@ function isProductSearchMatch(product) {
 
 /* Add editorial micro-accents to AI chat text */
 function formatEditorialChatText(text) {
-  let formatted = escapeHtml(text).replace(/\n/g, "<br>");
+  let formatted = escapeHtml(text);
+  formatted = formatted.replace(
+    /(https?:\/\/[^\s<]+)/gi,
+    '<a class="source-link" href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+  formatted = formatted.replace(/\n/g, "<br>");
   const ingredientPatterns = [
     "hyaluronic acid",
     "niacinamide",
@@ -445,25 +445,22 @@ function renderSavedProducts() {
 
   savedProductsGrid.innerHTML = savedProducts
     .map(
-      (product) => `
-        <article class="saved-product-card">
-          <span class="saved-product-number">${product.id}</span>
-          <img src="${product.image}" alt="${product.name}" class="saved-product-image">
-          <div class="saved-product-info">
-            <h3 class="saved-product-name">${product.name}</h3>
-            <p class="saved-product-brand">${product.brand}</p>
-          </div>
-          <button class="saved-product-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${product.name} from saved products">x</button>
-        </article>
+      (product, index) => `
+        <li class="saved-product-item">
+          <span class="saved-product-line">${index + 1}. ${product.name} - ${product.brand}</span>
+          <button class="saved-product-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${product.name} from saved products">Remove</button>
+        </li>
       `
     )
     .join("");
+
+  savedProductsGrid.innerHTML = `<ul class="saved-products-list">${savedProductsGrid.innerHTML}</ul>`;
 }
 
 /* Save selected products into the curated edit panel */
 function saveSelectedProductsToCuratedEdit() {
   if (selectedProducts.length === 0) {
-    addChatMessage("ai", "Select products first, then save them to Your Curated Edit.");
+    addChatMessage("ai", "Select products first, then save them to The Product Atelier.");
     return;
   }
 
@@ -471,14 +468,14 @@ function saveSelectedProductsToCuratedEdit() {
   const additions = selectedProducts.filter((product) => !savedIds.has(product.id));
 
   if (!additions.length) {
-    addChatMessage("ai", "Those products are already in Your Curated Edit.");
+    addChatMessage("ai", "Those products are already in The Product Atelier.");
     return;
   }
 
   savedProducts = [...additions, ...savedProducts];
   persistSavedProducts();
   renderSavedProducts();
-  addChatMessage("ai", "Your curated edit has been updated.");
+  addChatMessage("ai", "The Product Atelier has been updated.");
 }
 
 /* Clear the curated edit panel */
@@ -486,7 +483,7 @@ function clearSavedProducts() {
   savedProducts = [];
   persistSavedProducts();
   renderSavedProducts();
-  addChatMessage("ai", "Your curated edit has been cleared.");
+  addChatMessage("ai", "The Product Atelier has been cleared.");
 }
 
 /* Remove one saved product from the curated edit */
@@ -500,7 +497,7 @@ function removeSavedProduct(productId) {
   savedProducts = nextSavedProducts;
   persistSavedProducts();
   renderSavedProducts();
-  addChatMessage("ai", "A product has been removed from Your Curated Edit.");
+  addChatMessage("ai", "A product has been removed from The Product Atelier.");
 }
 
 /* Build routine text for download */
@@ -686,12 +683,17 @@ function displayProducts(products) {
         <div class="product-info">
           <h3 class="product-name">${product.name}</h3>
           <p>${product.brand}</p>
+          <button class="product-description-trigger" type="button" data-id="${product.id}" aria-label="Open description for ${escapeHtml(product.name)}">
+            Product Description
+          </button>
         </div>
       </div>
-      <div class="product-description-panel">
-        <div class="product-description-inner">
-          <p class="product-description">${product.description}</p>
-        </div>
+      <div class="product-description-popout" ${expandedProducts.includes(product.id) ? "" : "hidden"}>
+        <button class="product-description-close" type="button" data-id="${product.id}" aria-label="Close description for ${escapeHtml(product.name)}">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+        <p class="product-description-popout-title">${product.name}</p>
+        <p class="product-description-popout-text">${product.description}</p>
       </div>
       <span class="selection-dot" aria-hidden="true"></span>
     </div>
@@ -709,13 +711,20 @@ function handleProductSearch(value) {
   displayProducts(currentProducts);
 }
 
-/* Toggle expandable editorial fold state */
+/* Toggle side description popout for a product card */
 function toggleExpandedProduct(productId) {
   if (expandedProducts.includes(productId)) {
-    expandedProducts = expandedProducts.filter((id) => id !== productId);
+    expandedProducts = [];
   } else {
-    expandedProducts.push(productId);
+    expandedProducts = [productId];
   }
+
+  displayProducts(currentProducts);
+}
+
+/* Close side description popout for a specific product */
+function closeExpandedProduct(productId) {
+  expandedProducts = expandedProducts.filter((id) => id !== productId);
 
   displayProducts(currentProducts);
 }
@@ -777,8 +786,8 @@ if (productsCarouselPrev && productsCarouselNext) {
 if (productsContainer) {
   productsContainer.addEventListener("pointerdown", handleCarouselPointerDown);
   productsContainer.addEventListener("pointermove", handleCarouselPointerMove);
-  productsContainer.addEventListener("pointerup", handleCarouselPointerUp);
-  productsContainer.addEventListener("pointercancel", handleCarouselPointerUp);
+  document.addEventListener("pointerup", handleCarouselPointerUp);
+  document.addEventListener("pointercancel", handleCarouselPointerUp);
   productsContainer.addEventListener("scroll", updateCarouselControlsState, { passive: true });
 }
 
@@ -793,6 +802,20 @@ productsContainer.addEventListener("click", (e) => {
     return;
   }
 
+  const descriptionTrigger = e.target.closest(".product-description-trigger");
+  if (descriptionTrigger) {
+    const productId = Number(descriptionTrigger.dataset.id);
+    toggleExpandedProduct(productId);
+    return;
+  }
+
+  const descriptionClose = e.target.closest(".product-description-close");
+  if (descriptionClose) {
+    const productId = Number(descriptionClose.dataset.id);
+    closeExpandedProduct(productId);
+    return;
+  }
+
   const card = e.target.closest(".product-card");
   if (!card) {
     return;
@@ -800,7 +823,6 @@ productsContainer.addEventListener("click", (e) => {
 
   const productId = Number(card.dataset.id);
   toggleSelectedProduct(productId);
-  toggleExpandedProduct(productId);
 });
 
 updateSelectedCount();
