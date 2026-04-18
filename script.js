@@ -1,5 +1,6 @@
 /* Get references to DOM elements */
 const categoryFilter = document.getElementById("categoryFilter");
+const productSearch = document.getElementById("productSearch");
 const productsContainer = document.getElementById("productsContainer");
 const selectedCountText = document.getElementById("selectedCountText");
 const saveSelectedProductsButton = document.getElementById("saveSelectedProductsBtn");
@@ -25,6 +26,7 @@ let beautyPreferences = {
   sensitivity: false,
   concerns: [],
 };
+let searchQuery = "";
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -67,6 +69,20 @@ function escapeHtml(text) {
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/* Normalize product text for search matching */
+function getProductSearchText(product) {
+  return `${product.name} ${product.brand} ${product.description} ${product.category}`.toLowerCase();
+}
+
+/* Determine whether a product matches the current search query */
+function isProductSearchMatch(product) {
+  if (!searchQuery.trim()) {
+    return true;
+  }
+
+  return getProductSearchText(product).includes(searchQuery.trim().toLowerCase());
 }
 
 /* Add editorial micro-accents to AI chat text */
@@ -300,6 +316,7 @@ function renderSavedProducts() {
             <h3 class="saved-product-name">${product.name}</h3>
             <p class="saved-product-brand">${product.brand}</p>
           </div>
+          <button class="saved-product-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${product.name} from saved products">x</button>
         </article>
       `
     )
@@ -333,6 +350,20 @@ function clearSavedProducts() {
   persistSavedProducts();
   renderSavedProducts();
   addChatMessage("ai", "Your curated edit has been cleared.");
+}
+
+/* Remove one saved product from the curated edit */
+function removeSavedProduct(productId) {
+  const nextSavedProducts = savedProducts.filter((product) => product.id !== productId);
+
+  if (nextSavedProducts.length === savedProducts.length) {
+    return;
+  }
+
+  savedProducts = nextSavedProducts;
+  persistSavedProducts();
+  renderSavedProducts();
+  addChatMessage("ai", "A product has been removed from Your Curated Edit.");
 }
 
 /* Build routine text for download */
@@ -510,7 +541,7 @@ function displayProducts(products) {
   productsContainer.innerHTML = products
     .map(
       (product) => `
-    <div class="product-card ${selectedProducts.some((item) => item.id === product.id) ? "selected" : ""} ${expandedProducts.includes(product.id) ? "expanded" : ""}" data-id="${product.id}">
+    <div class="product-card ${selectedProducts.some((item) => item.id === product.id) ? "selected" : ""} ${expandedProducts.includes(product.id) ? "expanded" : ""} ${isProductSearchMatch(product) ? "search-match" : "search-dim"}" data-id="${product.id}">
       <span class="editorial-corner" aria-hidden="true"></span>
       <div class="product-main">
         <img src="${product.image}" alt="${product.name}">
@@ -529,6 +560,12 @@ function displayProducts(products) {
   `
     )
     .join("");
+}
+
+/* Update search query and re-render product cards */
+function handleProductSearch(value) {
+  searchQuery = value || "";
+  displayProducts(currentProducts);
 }
 
 /* Toggle expandable editorial fold state */
@@ -579,6 +616,11 @@ categoryFilter.addEventListener("change", async (e) => {
   updateSaveSelectedButtonState();
 });
 
+/* Live search for product cards */
+productSearch.addEventListener("input", (e) => {
+  handleProductSearch(e.target.value);
+});
+
 /* Handle product card click for selecting products */
 productsContainer.addEventListener("click", (e) => {
   const card = e.target.closest(".product-card");
@@ -611,6 +653,17 @@ saveSelectedProductsButton.addEventListener("click", () => {
 /* Clear curated edit */
 clearSavedProductsButton.addEventListener("click", () => {
   clearSavedProducts();
+});
+
+/* Handle individual remove button clicks in curated edit */
+savedProductsGrid.addEventListener("click", (e) => {
+  const removeButton = e.target.closest(".saved-product-remove-btn");
+  if (!removeButton) {
+    return;
+  }
+
+  const productId = Number(removeButton.dataset.id);
+  removeSavedProduct(productId);
 });
 
 /* Save button downloads current routine */
