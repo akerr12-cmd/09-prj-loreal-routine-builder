@@ -40,6 +40,7 @@ export default {
     }
 
     const selectedProducts = normalizeSelectedProducts(requestBody.products);
+    const productCatalog = normalizeCatalog(requestBody.catalog);
     const conversation = normalizeConversation(requestBody.conversation);
     const assistantPrompt = userMessage || (mode === 'generate_routine' ? 'Please generate a personalized routine using my selected products.' : '');
 
@@ -208,6 +209,10 @@ export default {
         lines.push('recent_conversation_json=' + JSON.stringify(conversationValue));
       }
 
+      if (productCatalog.length) {
+        lines.push('product_catalog_json=' + JSON.stringify(productCatalog));
+      }
+
       if (preferenceSummary) {
         lines.push('user_preference_summary=' + preferenceSummary);
       }
@@ -215,8 +220,27 @@ export default {
       lines.push('When mode=generate_routine, use only selected_products_json for routine product steps.');
       lines.push('When mode=generate_routine, the first line of the response must be exactly: "Based on your product selection, here is the routine our beauty advisors have put together for you."');
       lines.push('Do not begin with any greeting or preface. Line 2 must begin the routine steps or section headers.');
+      lines.push('When the user asks for a cleanser or any product recommendation, choose a specific product from product_catalog_json and name it explicitly; do not answer with a generic category only.');
+      lines.push('Prefer recommendations that match the user’s stated concerns and the available catalog items.');
 
       return lines.join('\n');
+    }
+
+    function normalizeCatalog(products) {
+      if (!Array.isArray(products)) {
+        return [];
+      }
+
+      return products
+        .slice(0, 80)
+        .map((item) => ({
+          id: item?.id,
+          name: String(item?.name || '').trim(),
+          brand: String(item?.brand || '').trim(),
+          category: String(item?.category || '').trim(),
+          description: String(item?.description || '').trim(),
+        }))
+        .filter((item) => item.name);
     }
 
     function enforceGenerateRoutineOpening(text) {

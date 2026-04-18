@@ -17,6 +17,7 @@ const apiUrl = typeof OPENAI_API_URL === "string" ? OPENAI_API_URL : "";
 const savedProductsStorageKey = "loreal-curated-edit";
 
 let currentProducts = [];
+let productCatalog = [];
 let selectedProducts = [];
 let savedProducts = [];
 let expandedProducts = [];
@@ -37,9 +38,25 @@ productsContainer.innerHTML = `
 
 /* Load product data from JSON file */
 async function loadProducts() {
+  if (productCatalog.length) {
+    return productCatalog;
+  }
+
   const response = await fetch("products.json");
   const data = await response.json();
-  return data.products;
+  productCatalog = Array.isArray(data.products) ? data.products : [];
+  return productCatalog;
+}
+
+/* Get the full catalog payload for the assistant */
+function getProductCatalogPayload() {
+  return productCatalog.map((product) => ({
+    id: product.id,
+    name: product.name,
+    brand: product.brand,
+    category: product.category,
+    description: product.description,
+  }));
 }
 
 /* Load saved curated edit items from localStorage */
@@ -233,6 +250,10 @@ async function sendToRoutineAdvisor(mode, message) {
     throw new Error("Missing OPENAI_API_URL in secrets.js");
   }
 
+  if (!productCatalog.length) {
+    await loadProducts();
+  }
+
   const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
@@ -242,6 +263,7 @@ async function sendToRoutineAdvisor(mode, message) {
       message,
       mode,
       threadId: conversationThreadId,
+      catalog: getProductCatalogPayload(),
       products: getSelectedProductsPayload(),
       conversation: getConversationPayload(),
       preferences: getPreferenceSummary(),
