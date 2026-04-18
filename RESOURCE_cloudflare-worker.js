@@ -213,8 +213,32 @@ export default {
       }
 
       lines.push('When mode=generate_routine, use only selected_products_json for routine product steps.');
+      lines.push('When mode=generate_routine, the first line of the response must be exactly: "Based on your product selection, here is the routine our beauty advisors have put together for you."');
+      lines.push('Do not begin with any greeting or preface. Line 2 must begin the routine steps or section headers.');
 
       return lines.join('\n');
+    }
+
+    function enforceGenerateRoutineOpening(text) {
+      const requiredLine = 'Based on your product selection, here is the routine our beauty advisors have put together for you.';
+      const raw = String(text || '').trim();
+
+      if (!raw) {
+        return requiredLine;
+      }
+
+      const requiredIndex = raw.indexOf(requiredLine);
+
+      if (requiredIndex === -1) {
+        return `${requiredLine}\n${raw}`;
+      }
+
+      const body = raw
+        .slice(requiredIndex + requiredLine.length)
+        .replace(/^\s*\n+/, '\n')
+        .trim();
+
+      return body ? `${requiredLine}\n${body}` : requiredLine;
     }
 
     function normalizeProducts(products) {
@@ -491,11 +515,14 @@ export default {
 
       const assistantText = await getLatestAssistantMessage(activeThreadId, runId);
       const structured = extractStructuredPayload(assistantText);
+      const finalContent = mode === 'generate_routine'
+        ? enforceGenerateRoutineOpening(structured.answer || assistantText)
+        : (structured.answer || assistantText);
 
       return new Response(JSON.stringify({
         threadId: activeThreadId,
         mode,
-        content: structured.answer || assistantText,
+        content: finalContent,
         products: structured.products,
       }), { headers: corsHeaders });
     } catch (error) {

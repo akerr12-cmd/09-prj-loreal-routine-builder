@@ -450,6 +450,7 @@ function getRoutinePhase(product) {
 /* Build each routine step with icon and short editorial guidance */
 function buildRoutineStep(product, stepNumber) {
   const phase = getRoutinePhase(product);
+  const isActiveStep = stepNumber === 1;
 
   let stepTitle = "Enhance";
   let iconClass = "fa-sparkles";
@@ -474,12 +475,12 @@ function buildRoutineStep(product, stepNumber) {
   }
 
   return `
-    <article class="routine-step-card">
+    <article class="routine-step-card ${isActiveStep ? "active" : ""}">
       <span class="routine-step-number">${stepNumber}</span>
       <div class="routine-step-content">
         <h3 class="routine-step-title">${stepTitle}: ${product.name}</h3>
         <p class="routine-step-brand">${product.brand}</p>
-        <p class="routine-step-guidance"><i class="fa-solid ${iconClass} routine-icon" aria-hidden="true"></i>${guidance}</p>
+        <p class="routine-step-guidance"><i class="fa-solid ${iconClass} routine-icon" aria-hidden="true"></i><span class="routine-guidance-text">${guidance}</span></p>
       </div>
     </article>
   `;
