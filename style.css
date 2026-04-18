@@ -627,3 +627,15 @@ body {
   color: #ff003b;
   margin-right: 7px;
 }
+
+.routine-ai-note {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #0d0d0d;
+  color: #f7f4ee;
+  border-left: 2px solid #e3a535;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  white-space: pre-line;
+  line-height: 1.45;
+}

@@ -32,12 +32,17 @@ export default {
 
     const userMessage = typeof requestBody.message === 'string' ? requestBody.message.trim() : '';
     const threadId = typeof requestBody.threadId === 'string' ? requestBody.threadId : '';
+    const mode = requestBody.mode === 'generate_routine' ? 'generate_routine' : 'follow_up';
 
     if (!apiKey || !assistantId) {
       return new Response(JSON.stringify({ error: { message: 'Missing OPENAI_API_KEY or ASSISTANT_ID in Cloudflare Worker secrets.' } }), { status: 500, headers: corsHeaders });
     }
 
-    if (!userMessage) {
+    const selectedProducts = normalizeSelectedProducts(requestBody.products);
+    const conversation = normalizeConversation(requestBody.conversation);
+    const assistantPrompt = userMessage || (mode === 'generate_routine' ? 'Please generate a personalized routine using my selected products.' : '');
+
+    if (!assistantPrompt) {
       return new Response(JSON.stringify({ error: { message: 'Missing user message.' } }), { status: 400, headers: corsHeaders });
     }
 
@@ -69,7 +74,7 @@ export default {
         headers: openAiHeaders,
         body: JSON.stringify({
           role: 'user',
-          content: userMessage,
+          content: assistantPrompt,
         }),
       });
 
@@ -82,22 +87,19 @@ export default {
       return data;
     }
 
-    async function createRun(activeThreadId) {
+    async function createRun(activeThreadId, runtimeInstructions) {
+      const runBody = {
+        assistant_id: assistantId,
+      };
+
+      if (runtimeInstructions) {
+        runBody.additional_instructions = runtimeInstructions;
+      }
+
       const response = await fetch(`${apiBase}/threads/${activeThreadId}/runs`, {
         method: 'POST',
         headers: openAiHeaders,
-        body: JSON.stringify({
-          assistant_id: assistantId,
-          additional_instructions: [
-            'Treat each new user message as a continuation of the same conversation unless the user clearly starts a new topic.',
-            'If the user is answering your previous question, do not restart; continue from the prior turn naturally.',
-            'Only answer questions related to L\'Oreal products, ingredients, routines, beauty concerns, or usage guidance.',
-            'If the user asks an unrelated question, set answer to exactly: "I can only help with L\'Oreal products, ingredients, and beauty routines."',
-            'Return a valid JSON object with this shape: {"answer":"string","products":[{"name":"string"}]}.',
-            'The answer field must contain the conversational reply for chat.',
-            'When recommending products, include them in products as up to 3 L\'Oreal product names. Do not include links or URLs. If no product is recommended, return an empty products array.'
-          ].join(' '),
-        }),
+        body: JSON.stringify(runBody),
       });
 
       const data = await response.json();
@@ -159,6 +161,55 @@ export default {
       }
 
       return assistantText;
+    }
+
+    function normalizeSelectedProducts(products) {
+      if (!Array.isArray(products)) {
+        return [];
+      }
+
+      return products
+        .slice(0, 20)
+        .map((item) => ({
+          name: String(item?.name || '').trim(),
+          brand: String(item?.brand || '').trim(),
+          category: String(item?.category || '').trim(),
+          description: String(item?.description || '').trim(),
+        }))
+        .filter((item) => item.name);
+    }
+
+    function normalizeConversation(messages) {
+      if (!Array.isArray(messages)) {
+        return [];
+      }
+
+      return messages
+        .slice(-12)
+        .map((item) => ({
+          role: item?.role === 'assistant' ? 'assistant' : 'user',
+          content: String(item?.content || '').trim(),
+        }))
+        .filter((item) => item.content);
+    }
+
+    function buildRuntimeInstructions(modeValue, productsValue, conversationValue) {
+      const lines = [
+        'Runtime context from app:',
+        `mode=${modeValue}`,
+      ];
+
+      if (productsValue.length) {
+        lines.push('selected_products_json=' + JSON.stringify(productsValue));
+      }
+
+      if (conversationValue.length) {
+        lines.push('recent_conversation_json=' + JSON.stringify(conversationValue));
+      }
+
+      lines.push('When mode=generate_routine, use only selected_products_json for routine product steps.');
+
+      return lines.join('\n');
     }
 
     function normalizeProducts(products) {
@@ -405,39 +456,52 @@ export default {
       return { answer: cleanAnswer || raw, products: inlineProducts };
     }
 
-    let activeThreadId = threadId;
+    try {
+      const runtimeInstructions = buildRuntimeInstructions(mode, selectedProducts, conversation);
+      let activeThreadId = threadId;
 
-    if (!activeThreadId) {
-      activeThreadId = await createThread();
-    }
-
-    await addMessage(activeThreadId);
-    const runId = await createRun(activeThreadId);
-
-    let runData = await getRun(activeThreadId, runId);
-    let attempts = 0;
-
-    while (runData.status === 'queued' || runData.status === 'in_progress') {
-      if (attempts >= 15) {
-        throw new Error('Assistant response timed out.');
+      if (!activeThreadId) {
+        activeThreadId = await createThread();
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      runData = await getRun(activeThreadId, runId);
-      attempts += 1;
+      await addMessage(activeThreadId);
+      const runId = await createRun(activeThreadId, runtimeInstructions);
+
+      let runData = await getRun(activeThreadId, runId);
+      let attempts = 0;
+
+      while (runData.status === 'queued' || runData.status === 'in_progress') {
+        if (attempts >= 15) {
+          throw new Error('Assistant response timed out.');
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        runData = await getRun(activeThreadId, runId);
+        attempts += 1;
+      }
+
+      if (runData.status !== 'completed') {
+        throw new Error(`Assistant run ended with status: ${runData.status}`);
+      }
+
+      const assistantText = await getLatestAssistantMessage(activeThreadId, runId);
+      const structured = extractStructuredPayload(assistantText);
+
+      return new Response(JSON.stringify({
+        threadId: activeThreadId,
+        mode,
+        content: structured.answer || assistantText,
+        products: structured.products,
+      }), { headers: corsHeaders });
+    } catch (error) {
+      return new Response(JSON.stringify({
+        error: {
+          message: error?.message || 'Unexpected worker error.',
+        },
+      }), {
+        status: 500,
+        headers: corsHeaders,
+      });
     }
-
-    if (runData.status !== 'completed') {
-      throw new Error(`Assistant run ended with status: ${runData.status}`);
-    }
-
-    const assistantText = await getLatestAssistantMessage(activeThreadId, runId);
-    const structured = extractStructuredPayload(assistantText);
-
-    return new Response(JSON.stringify({
-      threadId: activeThreadId,
-      content: structured.answer || assistantText,
-      products: structured.products,
-    }), { headers: corsHeaders });
   }
 };

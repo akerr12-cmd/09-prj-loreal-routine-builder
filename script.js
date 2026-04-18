@@ -7,10 +7,12 @@ const routineOutput = document.getElementById("routineOutput");
 const chatForm = document.getElementById("chatForm");
 const chatWindow = document.getElementById("chatWindow");
 const userInput = document.getElementById("userInput");
+const apiUrl = typeof OPENAI_API_URL === "string" ? OPENAI_API_URL : "";
 
 let currentProducts = [];
 let selectedProducts = [];
 let expandedProducts = [];
+let conversationThreadId = "";
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -33,6 +35,75 @@ function addChatMessage(sender, message) {
   bubble.textContent = message;
   chatWindow.appendChild(bubble);
   chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+/* Convert selected product objects into a clean API payload */
+function getSelectedProductsPayload() {
+  return selectedProducts.map((product) => ({
+    id: product.id,
+    name: product.name,
+    brand: product.brand,
+    category: product.category,
+    description: product.description,
+  }));
+}
+
+/* Build conversation history from chat bubbles for follow-up context */
+function getConversationPayload() {
+  const bubbles = chatWindow.querySelectorAll(".chat-bubble");
+
+  return Array.from(bubbles)
+    .map((bubble) => ({
+      role: bubble.classList.contains("user") ? "user" : "assistant",
+      content: bubble.textContent ? bubble.textContent.trim() : "",
+    }))
+    .filter((message) => message.content);
+}
+
+/* Send message context to Cloudflare Worker and return assistant response */
+async function sendToRoutineAdvisor(mode, message) {
+  if (!apiUrl) {
+    throw new Error("Missing OPENAI_API_URL in secrets.js");
+  }
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message,
+      mode,
+      threadId: conversationThreadId,
+      products: getSelectedProductsPayload(),
+      conversation: getConversationPayload(),
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.error?.message || "Unable to reach routine advisor.");
+  }
+
+  if (typeof data.threadId === "string" && data.threadId) {
+    conversationThreadId = data.threadId;
+  }
+
+  return data;
+}
+
+/* Add the AI-generated routine summary below the visual timeline */
+function renderRoutineEditorialSummary(summaryText) {
+  const existingSummary = routineOutput.querySelector(".routine-ai-note");
+  if (existingSummary) {
+    existingSummary.remove();
+  }
+
+  const note = document.createElement("article");
+  note.className = "routine-ai-note";
+  note.textContent = summaryText;
+  routineOutput.appendChild(note);
 }
 
 /* Infer routine phase so products can be sorted in a practical order */
@@ -93,7 +164,7 @@ function buildRoutineStep(product, stepNumber) {
 }
 
 /* Render personalized routine in editorial timeline format */
-function generatePersonalizedRoutine() {
+async function generatePersonalizedRoutine() {
   if (selectedProducts.length === 0) {
     routineOutput.innerHTML = `
       <p class="routine-placeholder">Select at least one product to generate your personalized routine.</p>
@@ -121,10 +192,21 @@ function generatePersonalizedRoutine() {
     </div>
   `;
 
-  addChatMessage(
-    "ai",
-    `Your routine is ready with ${orderedProducts.length} curated steps. Follow the order in the editorial timeline.`
-  );
+  try {
+    const routineResponse = await sendToRoutineAdvisor(
+      "generate_routine",
+      "Please generate my personalized routine using only my selected products."
+    );
+
+    const advisorText = routineResponse.content || "Your routine is ready in the editorial timeline above.";
+    addChatMessage("ai", advisorText);
+    renderRoutineEditorialSummary(advisorText);
+  } catch (error) {
+    addChatMessage(
+      "ai",
+      `I couldn't generate the AI routine details right now. ${error.message}`
+    );
+  }
 }
 
 /* Render selected products as an editorial vertical list */
@@ -255,8 +337,8 @@ generateRoutineButton.addEventListener("click", () => {
   generatePersonalizedRoutine();
 });
 
-/* Chat form submission handler - editorial style placeholder conversation */
-chatForm.addEventListener("submit", (e) => {
+/* Chat form submission handler connected to Cloudflare Worker */
+chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const message = userInput.value.trim();
 
@@ -265,14 +347,12 @@ chatForm.addEventListener("submit", (e) => {
   }
 
   addChatMessage("user", message);
-
-  if (message.toLowerCase().includes("routine")) {
-    addChatMessage("ai", "Choose your products, then click Generate Routine for a personalized editorial flow.");
-  } else if (message.toLowerCase().includes("recommend")) {
-    addChatMessage("ai", "I recommend choosing one cleanser, one treatment or moisturizer, and one finishing product for balance.");
-  } else {
-    addChatMessage("ai", "Tell me your skin or hair goals, and I will guide your next product picks.");
-  }
-
   userInput.value = "";
+
+  try {
+    const chatResponse = await sendToRoutineAdvisor("follow_up", message);
+    addChatMessage("ai", chatResponse.content || "I can help refine your beauty routine.");
+  } catch (error) {
+    addChatMessage("ai", `I couldn't connect to the routine advisor right now. ${error.message}`);
+  }
 });
