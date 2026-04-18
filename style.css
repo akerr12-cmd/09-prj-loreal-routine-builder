@@ -1019,3 +1019,144 @@ body {
   cursor: not-allowed;
   transform: none;
 }
+
+/* RTL support */
+html[dir="rtl"] body {
+  direction: rtl;
+}
+
+html[dir="rtl"] .page-wrapper {
+  direction: rtl;
+}
+
+html[dir="rtl"] .site-header,
+html[dir="rtl"] .search-section,
+html[dir="rtl"] .search-bar-wrap,
+html[dir="rtl"] .products-actions,
+html[dir="rtl"] .curated-edit-section,
+html[dir="rtl"] .routine-section,
+html[dir="rtl"] .chatbox,
+html[dir="rtl"] .site-footer {
+  text-align: right;
+}
+
+html[dir="rtl"] .site-header::after,
+html[dir="rtl"] .site-footer::before {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+html[dir="rtl"] .search-section::after {
+  left: 16px;
+  right: auto;
+}
+
+html[dir="rtl"] .search-section select {
+  padding: 16px 16px 16px 46px;
+}
+
+html[dir="rtl"] .product-search,
+html[dir="rtl"] .chat-form input {
+  text-align: right;
+}
+
+html[dir="rtl"] .chat-form {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .chat-bubble.ai {
+  align-self: flex-end;
+  border-left: none;
+  border-right: 2px solid #e3a535;
+}
+
+html[dir="rtl"] .chat-bubble.user {
+  align-self: flex-start;
+  border-left: none;
+  border-right: 2px solid #ff003b;
+}
+
+html[dir="rtl"] .products-actions,
+html[dir="rtl"] .curated-edit-header,
+html[dir="rtl"] .chat-form,
+html[dir="rtl"] .routine-step-card,
+html[dir="rtl"] .saved-product-card,
+html[dir="rtl"] .product-main {
+  direction: rtl;
+}
+
+html[dir="rtl"] .product-main {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .selection-dot,
+html[dir="rtl"] .editorial-corner {
+  right: auto;
+  left: 10px;
+}
+
+html[dir="rtl"] .editorial-corner {
+  border-top-right-radius: 0;
+  border-top-left-radius: 10px;
+  transform-origin: 0 0;
+}
+
+html[dir="rtl"] .product-description-panel {
+  padding-left: 0;
+  padding-right: 14px;
+}
+
+html[dir="rtl"] .product-description-panel::before {
+  left: auto;
+  right: 4px;
+}
+
+html[dir="rtl"] .routine-timeline {
+  padding-left: 0;
+  padding-right: 34px;
+}
+
+html[dir="rtl"] .routine-timeline::before {
+  left: auto;
+  right: 14px;
+}
+
+html[dir="rtl"] .routine-step-card {
+  grid-template-columns: 1fr 38px;
+}
+
+html[dir="rtl"] .routine-step-number {
+  order: 2;
+  text-align: center;
+}
+
+html[dir="rtl"] .routine-step-content {
+  order: 1;
+}
+
+html[dir="rtl"] .routine-step-guidance {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .saved-product-card {
+  grid-template-columns: 1fr 70px 34px;
+}
+
+html[dir="rtl"] .saved-product-remove-btn {
+  justify-self: start;
+}
+
+html[dir="rtl"] .save-selected-btn,
+html[dir="rtl"] .generate-btn,
+html[dir="rtl"] .save-routine-btn {
+  text-align: center;
+}
+
+html[dir="rtl"] .search-bar-wrap,
+html[dir="rtl"] .products-actions,
+html[dir="rtl"] .curated-edit-section,
+html[dir="rtl"] .routine-section,
+html[dir="rtl"] .chatbox {
+  border-left-width: 1.5px;
+  border-right-width: 1.5px;
+}

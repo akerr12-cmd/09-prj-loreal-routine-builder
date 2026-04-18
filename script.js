@@ -16,6 +16,24 @@ const apiUrl = typeof OPENAI_API_URL === "string" ? OPENAI_API_URL : "";
 
 const savedProductsStorageKey = "loreal-curated-edit";
 
+const rtlLanguagePrefixes = ["ar", "he", "fa", "ur"];
+
+function initializeTextDirection() {
+  if (document.documentElement.getAttribute("dir")) {
+    return;
+  }
+
+  const browserLanguage = (navigator.language || navigator.userLanguage || "").toLowerCase();
+  const isRtlLanguage = rtlLanguagePrefixes.some((prefix) => browserLanguage.startsWith(prefix));
+
+  if (isRtlLanguage) {
+    document.documentElement.setAttribute("dir", "rtl");
+    document.documentElement.setAttribute("lang", browserLanguage.split("-")[0] || "ar");
+  }
+}
+
+initializeTextDirection();
+
 let currentProducts = [];
 let productCatalog = [];
 let selectedProducts = [];
