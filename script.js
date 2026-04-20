@@ -576,14 +576,17 @@ function isAllowedFollowUpTopic(message, conversationHistory = []) {
 
 /* Send message context to Cloudflare Worker and return assistant response */
 async function sendToRoutineAdvisor(mode, message) {
+  // Step 1: Make sure the Worker URL is configured in the frontend secrets file.
   if (!apiUrl) {
     throw new Error("Missing OPENAI_API_URL in secrets.js");
   }
 
+  // Step 2: Ensure product catalog is loaded before building payload context.
   if (!productCatalog.length) {
     await loadProducts();
   }
 
+  // Step 3: Send one complete request object (message, mode, catalog, selected products, chat history, preferences).
   const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
@@ -602,14 +605,17 @@ async function sendToRoutineAdvisor(mode, message) {
 
   const data = await response.json();
 
+  // Step 4: Surface backend errors with the exact message when available.
   if (!response.ok) {
     throw new Error(data?.error?.message || "Unable to reach routine advisor.");
   }
 
+  // Step 5: Keep thread id so follow-up messages stay in one conversation context.
   if (typeof data.threadId === "string" && data.threadId) {
     conversationThreadId = data.threadId;
   }
 
+  // Step 6: Return normalized Worker response to the caller.
   return data;
 }
 
@@ -780,7 +786,10 @@ async function addAllSuggestedProductsToRoutine() {
   updateSaveSelectedButtonState();
   renderSavedProducts();
 
-  addChatMessage("ai", `${addedCount} suggested product${addedCount === 1 ? "" : "s"} were added to your routine.`);
+  addChatMessage(
+    "ai",
+    `${addedCount} suggested product${addedCount === 1 ? "" : "s"} ${addedCount === 1 ? "was" : "were"} added to your routine.`
+  );
   await generatePersonalizedRoutine();
   renderRoutineQuestionContext();
 }
@@ -1121,6 +1130,7 @@ function startNewRoutine() {
 
 /* Render personalized routine as AI note only */
 async function generatePersonalizedRoutine() {
+  // Step 1: Require at least one selected product before generating a routine.
   if (selectedProducts.length === 0) {
     routineOutput.innerHTML = `
       <p class="routine-placeholder">Select at least one product to generate your personalized routine.</p>
@@ -1130,6 +1140,7 @@ async function generatePersonalizedRoutine() {
     return;
   }
 
+  // Step 2: Prepare UI state for a fresh routine generation pass.
   const placeholder = routineOutput.querySelector(".routine-placeholder");
   if (placeholder) {
     placeholder.remove();
@@ -1140,6 +1151,7 @@ async function generatePersonalizedRoutine() {
   saveRoutineButton.disabled = false;
 
   try {
+    // Step 3: Show loading feedback while waiting for AI response.
     showThinkingIndicator();
     const routineResponse = await sendToRoutineAdvisor(
       "generate_routine",
@@ -1147,13 +1159,17 @@ async function generatePersonalizedRoutine() {
     );
     removeThinkingIndicator();
 
+    // Step 4: Commit selected products to saved list after successful generation.
     const advisorText = routineResponse.content || "Your personalized routine note is ready.";
     commitSelectedProductsToCuratedEdit();
     renderSavedProducts();
+
+    // Step 5: Update both chat and routine panel with the new AI output.
     addChatMessage("ai", advisorText);
     renderRoutineQuestionContext();
     renderRoutineEditorialSummary(advisorText);
   } catch (error) {
+    // Step 6: Provide a friendly error if generation fails.
     removeThinkingIndicator();
     addChatMessage(
       "ai",
@@ -1164,6 +1180,7 @@ async function generatePersonalizedRoutine() {
 
 /* Create HTML for displaying product cards */
 function displayProducts(products) {
+  // Step 1: Rebuild the full product card grid using current selection/search/expanded states.
   productsContainer.innerHTML = products
     .map(
       (product) => `
@@ -1207,6 +1224,7 @@ function displayProducts(products) {
     )
     .join("");
 
+  // Step 2: Reset carousel position and update arrow enabled/disabled state.
   productsContainer.scrollTo({ left: 0, behavior: "auto" });
   updateCarouselControlsState();
 }
@@ -1305,11 +1323,13 @@ window.addEventListener("resize", () => {
 
 /* Handle product card click for selecting products */
 productsContainer.addEventListener("click", (e) => {
+  // Step 1: Ignore the synthetic click that can happen after drag scrolling.
   if (suppressProductClickOnce) {
     suppressProductClickOnce = false;
     return;
   }
 
+  // Step 2: If user clicked "Product Description", open that card's detail popout.
   const descriptionTrigger = e.target.closest(".product-description-trigger");
   if (descriptionTrigger) {
     const productId = Number(descriptionTrigger.dataset.id);
@@ -1317,6 +1337,7 @@ productsContainer.addEventListener("click", (e) => {
     return;
   }
 
+  // Step 3: If user clicked the close icon, collapse that popout.
   const descriptionClose = e.target.closest(".product-description-close");
   if (descriptionClose) {
     const productId = Number(descriptionClose.dataset.id);
@@ -1324,6 +1345,7 @@ productsContainer.addEventListener("click", (e) => {
     return;
   }
 
+  // Step 4: Otherwise toggle card selected/unselected state.
   const card = e.target.closest(".product-card");
   if (!card) {
     return;
@@ -1431,6 +1453,7 @@ saveRoutineButton.addEventListener("click", () => {
 
 /* Chat form submission handler connected to Cloudflare Worker */
 chatForm.addEventListener("submit", async (e) => {
+  // Step 1: Prevent full page reload and read user text.
   e.preventDefault();
   const message = userInput.value.trim();
 
@@ -1438,30 +1461,39 @@ chatForm.addEventListener("submit", async (e) => {
     return;
   }
 
+  // Step 2: Build history context before validation and API call.
   const conversationHistory = getConversationPayload();
 
+  // Step 3: Keep follow-up chat on-topic for routine/beauty support.
   if (!isAllowedFollowUpTopic(message, conversationHistory)) {
     addChatMessage("ai", "Please keep follow-up questions focused on your generated routine, skincare, haircare, makeup, fragrance, or related beauty topics.");
     return;
   }
 
+  // Step 4: Render user bubble immediately for a responsive chat feel.
   addChatMessage("user", message);
   updateBeautyPreferencesFromMessage(message);
   userInput.value = "";
 
   try {
+    // Step 5: Request follow-up answer from Worker and show loading state.
     showThinkingIndicator();
     const chatResponse = await sendToRoutineAdvisor("follow_up", message);
     removeThinkingIndicator();
+
+    // Step 6: Sync suggested products shown in The Product Atelier.
     if (Array.isArray(chatResponse.products) && chatResponse.products.length > 0) {
       suggestedRoutineProducts = chatResponse.products;
     } else {
       suggestedRoutineProducts = [];
     }
+
+    // Step 7: Render assistant answer in both chat stream and routine panel summary.
     renderSavedProducts();
     addChatMessage("ai", chatResponse.content || "I can help refine your beauty routine.");
     renderRoutineEditorialSummary(chatResponse.content || "I can help refine your beauty routine.");
   } catch (error) {
+    // Step 8: Show a clear fallback message if the request fails.
     removeThinkingIndicator();
     addChatMessage("ai", `I couldn't connect to the routine advisor right now. ${error.message}`);
   }

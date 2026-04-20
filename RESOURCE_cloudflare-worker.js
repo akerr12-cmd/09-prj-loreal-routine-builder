@@ -1,5 +1,6 @@
 export default {
   async fetch(request, env) {
+    // Step 1: Set CORS + JSON headers so the browser can call this Worker safely.
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -7,14 +8,17 @@ export default {
       'Content-Type': 'application/json'
     };
 
+    // Step 2: Reply to preflight checks quickly.
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
 
+    // Step 3: Enforce POST because this endpoint expects a JSON payload.
     if (request.method !== 'POST') {
       return new Response(JSON.stringify({ error: { message: 'Method not allowed. Use POST for chat requests.' } }), { status: 405, headers: corsHeaders });
     }
 
+    // Step 4: Read Worker secrets/config once for this request.
     const apiKey = env.OPENAI_API_KEY;
     const assistantId = env.ASSISTANT_ID;
     const openAiModel = typeof env.OPENAI_MODEL === 'string' && env.OPENAI_MODEL.trim()
@@ -24,6 +28,7 @@ export default {
 
     let assistantInstructionsCache = null;
 
+    // Step 5: Load Assistant instructions (if provided) and cache them per request.
     async function getAssistantInstructions() {
       if (!assistantId) {
         return '';
@@ -56,6 +61,7 @@ export default {
 
     let requestBody;
     try {
+      // Step 6: Parse incoming JSON body from the frontend.
       requestBody = await request.json();
     } catch (error) {
       return new Response(JSON.stringify({ error: { message: 'Invalid or empty JSON body. Send a JSON object with a message field.' } }), { status: 400, headers: corsHeaders });
@@ -70,10 +76,12 @@ export default {
     const mode = requestBody.mode === 'generate_routine' ? 'generate_routine' : 'follow_up';
     const preferences = typeof requestBody.preferences === 'string' ? requestBody.preferences.trim() : '';
 
+    // Step 7: Fail early if the API key was not configured in Worker secrets.
     if (!apiKey) {
       return new Response(JSON.stringify({ error: { message: 'Missing OPENAI_API_KEY in Cloudflare Worker secrets.' } }), { status: 500, headers: corsHeaders });
     }
 
+    // Step 8: Normalize arrays from client so later logic can trust the shape.
     const selectedProducts = normalizeSelectedProducts(requestBody.products);
     const productCatalog = normalizeCatalog(requestBody.catalog);
     const conversation = normalizeConversation(requestBody.conversation);
@@ -83,6 +91,7 @@ export default {
       return new Response(JSON.stringify({ error: { message: 'Missing user message.' } }), { status: 400, headers: corsHeaders });
     }
 
+    // Step 9: For follow-up mode, keep conversation on allowed routine/beauty topics.
     if (mode === 'follow_up' && !isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog, conversation)) {
       return new Response(JSON.stringify({
         error: {
@@ -91,11 +100,13 @@ export default {
       }), { status: 400, headers: corsHeaders });
     }
 
+    // Step 10: Build auth headers for OpenAI calls.
     const openAiHeaders = {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     };
 
+    // --- Search + relevance helpers ---
     function normalizeTextForSearch(text) {
       return String(text || '')
         .toLowerCase()
@@ -232,6 +243,7 @@ export default {
       return false;
     }
 
+    // --- Output shaping helpers ---
     function appendFallbackNotice(text) {
       const cleanText = String(text || '').trim();
 
@@ -270,6 +282,7 @@ export default {
     }
 
     async function createChatCompletion(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      // Build a standard chat completion request using mode + app context.
       const response = await fetch(`${apiBase}/chat/completions`, {
         method: 'POST',
         headers: openAiHeaders,
@@ -294,6 +307,7 @@ export default {
       return assistantText.trim();
     }
 
+    // --- Input normalization helpers ---
     function normalizeSelectedProducts(products) {
       if (!Array.isArray(products)) {
         return [];
@@ -324,6 +338,7 @@ export default {
     }
 
     async function buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary) {
+      // Build one plain-text instruction block so the model always sees the same structure.
       const assistantInstructions = await getAssistantInstructions();
       const lines = [
         'Runtime context from app:',
@@ -374,6 +389,7 @@ export default {
     }
 
     async function buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      // Build a focused web-search prompt with all runtime context included.
       const assistantInstructions = await getAssistantInstructions();
       const lines = [
         'User request: ' + userPrompt,
@@ -411,6 +427,7 @@ export default {
       return lines.join('\n');
     }
 
+    // --- Responses API parsing helpers ---
     function extractResponseText(responseData) {
       const outputText = typeof responseData?.output_text === 'string' ? responseData.output_text.trim() : '';
       if (outputText) {
@@ -480,6 +497,7 @@ export default {
     }
 
     async function createWebSearchCompletion(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      // Use OpenAI Responses API with web_search_preview to pull current web-backed suggestions.
       const response = await fetch(`${apiBase}/responses`, {
         method: 'POST',
         headers: openAiHeaders,
@@ -492,8 +510,7 @@ export default {
               content: [
                 {
                   type: 'input_text',
-                  text: buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary),
-                                  text: await buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary),
+                  text: await buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary),
                 },
               ],
             },
@@ -503,7 +520,6 @@ export default {
                 {
                   type: 'input_text',
                   text: await buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
-                                  text: await buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
                 },
               ],
             },
@@ -522,6 +538,7 @@ export default {
       return appendSourcesIfMissing(content, citations);
     }
 
+    // --- Product name extraction + cleanup helpers ---
     function normalizeCatalog(products) {
       if (!Array.isArray(products)) {
         return [];
@@ -626,6 +643,7 @@ export default {
       return name.replace(/\s{2,}/g, ' ').trim();
     }
 
+    // --- Suggested product parsing helpers ---
     function extractProductsFromText(text) {
       const normalized = String(text || '').replace(/\r\n/g, '\n');
       const headingRegex = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:suggested|recommended)\s+products?\s*:?\s*(?:\*\*)?\s*\n([\s\S]*)/i;
@@ -822,9 +840,18 @@ export default {
 
       const cleanAnswer = String(raw).trim();
       const sectionProducts = extractProductsFromText(raw);
-      return { answer: cleanAnswer || raw, products: sectionProducts };
+
+      // Fallback: if no formal suggested-products section is found,
+      // extract likely product names from inline recommendation phrases.
+      const inlineProducts = sectionProducts.length ? [] : extractInlineProductMentions(raw);
+
+      return {
+        answer: cleanAnswer || raw,
+        products: sectionProducts.length ? sectionProducts : inlineProducts,
+      };
     }
 
+    // Step 11: Run the model call (web-search first when needed, otherwise chat completion).
     try {
       const shouldSearchWeb = mode === 'follow_up' && shouldUseWebSearch(assistantPrompt, productCatalog);
       let responseText;
@@ -873,6 +900,7 @@ export default {
         ? appendFallbackNotice(contentWithFollowUp)
         : contentWithFollowUp;
 
+      // Step 12: Return a normalized payload used by the frontend UI.
       return new Response(JSON.stringify({
         threadId: threadId || '',
         mode,
@@ -880,6 +908,7 @@ export default {
         products: structured.products,
       }), { headers: corsHeaders });
     } catch (error) {
+      // Step 13: Return a safe error message if anything unexpected fails.
       return new Response(JSON.stringify({
         error: {
           message: error?.message || 'Unexpected worker error.',
