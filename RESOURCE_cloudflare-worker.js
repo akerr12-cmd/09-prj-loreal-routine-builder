@@ -17,6 +17,9 @@ export default {
 
     const apiKey = env.OPENAI_API_KEY;
     const assistantId = env.ASSISTANT_ID;
+    const openAiModel = typeof env.OPENAI_MODEL === 'string' && env.OPENAI_MODEL.trim()
+      ? env.OPENAI_MODEL.trim()
+      : 'gpt-4.1';
     const apiBase = 'https://api.openai.com/v1';
 
     let requestBody;
@@ -39,10 +42,6 @@ export default {
       return new Response(JSON.stringify({ error: { message: 'Missing OPENAI_API_KEY in Cloudflare Worker secrets.' } }), { status: 500, headers: corsHeaders });
     }
 
-    if (!assistantId) {
-      return new Response(JSON.stringify({ error: { message: 'Missing ASSISTANT_ID in Cloudflare Worker secrets.' } }), { status: 500, headers: corsHeaders });
-    }
-
     const selectedProducts = normalizeSelectedProducts(requestBody.products);
     const productCatalog = normalizeCatalog(requestBody.catalog);
     const conversation = normalizeConversation(requestBody.conversation);
@@ -52,121 +51,57 @@ export default {
       return new Response(JSON.stringify({ error: { message: 'Missing user message.' } }), { status: 400, headers: corsHeaders });
     }
 
-    const openAiAssistantsHeaders = {
+    const openAiHeaders = {
       'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'OpenAI-Beta': 'assistants=v2'
+      'Content-Type': 'application/json'
     };
 
-    async function createThread() {
-      const response = await fetch(`${apiBase}/threads`, {
-        method: 'POST',
-        headers: openAiAssistantsHeaders,
-        body: '{}',
-      });
+    function buildChatMessages(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      const messages = [
+        {
+          role: 'system',
+          content: buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary),
+        },
+      ];
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.error?.message || 'Failed to create thread.');
+      for (let i = 0; i < conversationValue.length; i += 1) {
+        messages.push({
+          role: conversationValue[i].role,
+          content: conversationValue[i].content,
+        });
       }
 
-      return data.id;
+      messages.push({
+        role: 'user',
+        content: userPrompt,
+      });
+
+      return messages;
     }
 
-    async function addMessage(activeThreadId) {
-      const response = await fetch(`${apiBase}/threads/${activeThreadId}/messages`, {
+    async function createChatCompletion(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      const response = await fetch(`${apiBase}/chat/completions`, {
         method: 'POST',
-        headers: openAiAssistantsHeaders,
+        headers: openAiHeaders,
         body: JSON.stringify({
-          role: 'user',
-          content: assistantPrompt,
+          model: openAiModel,
+          messages: buildChatMessages(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error?.message || 'Failed to add message to thread.');
+        throw new Error(data?.error?.message || 'Failed to create chat completion.');
       }
 
-      return data;
-    }
+      const assistantText = data?.choices?.[0]?.message?.content;
 
-    async function createRun(activeThreadId, runtimeInstructions) {
-      const runBody = {
-        assistant_id: assistantId,
-      };
-
-      if (runtimeInstructions) {
-        runBody.additional_instructions = runtimeInstructions;
+      if (typeof assistantText !== 'string' || !assistantText.trim()) {
+        throw new Error('Chat completion response text was empty.');
       }
 
-      const response = await fetch(`${apiBase}/threads/${activeThreadId}/runs`, {
-        method: 'POST',
-        headers: openAiAssistantsHeaders,
-        body: JSON.stringify(runBody),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.error?.message || 'Failed to create assistant run.');
-      }
-
-      return data.id;
-    }
-
-    async function getRun(activeThreadId, runId) {
-      const response = await fetch(`${apiBase}/threads/${activeThreadId}/runs/${runId}`, {
-        method: 'GET',
-        headers: openAiAssistantsHeaders,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.error?.message || 'Failed to check assistant run.');
-      }
-
-      return data;
-    }
-
-    async function getLatestAssistantMessage(activeThreadId, runId) {
-      const response = await fetch(`${apiBase}/threads/${activeThreadId}/messages?limit=20`, {
-        method: 'GET',
-        headers: openAiAssistantsHeaders,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.error?.message || 'Failed to read assistant messages.');
-      }
-
-      const messages = data.data || [];
-      let assistantMessage = messages.find((message) => message.role === 'assistant' && message.run_id === runId);
-
-      if (!assistantMessage) {
-        assistantMessage = messages.find((message) => message.role === 'assistant');
-      }
-
-      if (!assistantMessage) {
-        throw new Error('No assistant message was returned.');
-      }
-
-      const textParts = (assistantMessage.content || [])
-        .filter((contentBlock) => contentBlock.type === 'text' && contentBlock.text && contentBlock.text.value)
-        .map((contentBlock) => contentBlock.text.value.trim())
-        .filter(Boolean);
-
-      const assistantText = textParts.join('\n\n');
-
-      if (!assistantText) {
-        throw new Error('Assistant response text was empty.');
-      }
-
-      return assistantText;
+      return assistantText.trim();
     }
 
     function normalizeSelectedProducts(products) {
@@ -220,6 +155,9 @@ export default {
       if (preferenceSummary) {
         lines.push('user_preference_summary=' + preferenceSummary);
       }
+
+      lines.push('Return plain text only. Do not use markdown tables unless needed.');
+      lines.push('When you recommend products, keep the tone friendly, specific, and concise.');
 
       lines.push('When mode=generate_routine, use only selected_products_json for routine product steps.');
       lines.push('When mode=generate_routine, the first line of the response must be exactly: "Based on your product selection, here is the routine our beauty advisors have put together for you."');
@@ -516,35 +454,13 @@ export default {
     }
 
     try {
-      const runtimeInstructions = buildRuntimeInstructions(mode, selectedProducts, conversation, preferences);
-      let activeThreadId = threadId;
-      let responseText = '';
-
-      if (!activeThreadId) {
-        activeThreadId = await createThread();
-      }
-
-      await addMessage(activeThreadId);
-      const runId = await createRun(activeThreadId, runtimeInstructions);
-
-      let runData = await getRun(activeThreadId, runId);
-      let attempts = 0;
-
-      while (runData.status === 'queued' || runData.status === 'in_progress') {
-        if (attempts >= 15) {
-          throw new Error('Assistant response timed out.');
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        runData = await getRun(activeThreadId, runId);
-        attempts += 1;
-      }
-
-      if (runData.status !== 'completed') {
-        throw new Error(`Assistant run ended with status: ${runData.status}`);
-      }
-
-      responseText = await getLatestAssistantMessage(activeThreadId, runId);
+      const responseText = await createChatCompletion(
+        mode,
+        selectedProducts,
+        conversation,
+        preferences,
+        assistantPrompt
+      );
 
       const structured = extractStructuredPayload(responseText);
       const finalContent = mode === 'generate_routine'
@@ -552,7 +468,7 @@ export default {
         : (structured.answer || responseText);
 
       return new Response(JSON.stringify({
-        threadId: activeThreadId || threadId || '',
+        threadId: threadId || '',
         mode,
         content: finalContent,
         products: structured.products,
