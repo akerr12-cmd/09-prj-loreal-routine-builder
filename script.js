@@ -1461,39 +1461,30 @@ chatForm.addEventListener("submit", async (e) => {
     return;
   }
 
-  // Step 2: Build history context before validation and API call.
-  const conversationHistory = getConversationPayload();
-
-  // Step 3: Keep follow-up chat on-topic for routine/beauty support.
-  if (!isAllowedFollowUpTopic(message, conversationHistory)) {
-    addChatMessage("ai", "Please keep follow-up questions focused on your generated routine, skincare, haircare, makeup, fragrance, or related beauty topics.");
-    return;
-  }
-
-  // Step 4: Render user bubble immediately for a responsive chat feel.
+  // Step 2: Render user bubble immediately for a responsive chat feel.
   addChatMessage("user", message);
   updateBeautyPreferencesFromMessage(message);
   userInput.value = "";
 
   try {
-    // Step 5: Request follow-up answer from Worker and show loading state.
+    // Step 3: Request follow-up answer from Worker and show loading state.
     showThinkingIndicator();
     const chatResponse = await sendToRoutineAdvisor("follow_up", message);
     removeThinkingIndicator();
 
-    // Step 6: Sync suggested products shown in The Product Atelier.
+    // Step 4: Sync suggested products shown in The Product Atelier.
     if (Array.isArray(chatResponse.products) && chatResponse.products.length > 0) {
       suggestedRoutineProducts = chatResponse.products;
     } else {
       suggestedRoutineProducts = [];
     }
 
-    // Step 7: Render assistant answer in both chat stream and routine panel summary.
+    // Step 5: Render assistant answer in both chat stream and routine panel summary.
     renderSavedProducts();
     addChatMessage("ai", chatResponse.content || "I can help refine your beauty routine.");
     renderRoutineEditorialSummary(chatResponse.content || "I can help refine your beauty routine.");
   } catch (error) {
-    // Step 8: Show a clear fallback message if the request fails.
+    // Step 6: Show a clear fallback message if the request fails.
     removeThinkingIndicator();
     addChatMessage("ai", `I couldn't connect to the routine advisor right now. ${error.message}`);
   }

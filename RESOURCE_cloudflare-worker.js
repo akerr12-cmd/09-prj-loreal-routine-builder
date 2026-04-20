@@ -91,20 +91,15 @@ export default {
       return new Response(JSON.stringify({ error: { message: 'Missing user message.' } }), { status: 400, headers: corsHeaders });
     }
 
-    // Step 9: For follow-up mode, keep conversation on allowed routine/beauty topics.
-    if (mode === 'follow_up' && !isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog, conversation)) {
-      return new Response(JSON.stringify({
-        error: {
-          message: 'Follow-up questions must be about your generated routine or beauty topics like skincare, haircare, makeup, and fragrance.',
-        },
-      }), { status: 400, headers: corsHeaders });
-    }
-
-    // Step 10: Build auth headers for OpenAI calls.
+    // Step 9: Build auth headers for OpenAI calls.
     const openAiHeaders = {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     };
+
+    // Optional diagnostics for frontend debugging (no secrets included).
+    const loadedAssistantInstructions = await getAssistantInstructions();
+    const instructionsSource = loadedAssistantInstructions ? 'assistant' : 'none';
 
     // --- Search + relevance helpers ---
     function normalizeTextForSearch(text) {
@@ -347,6 +342,9 @@ export default {
       if (assistantInstructions) {
         lines.push('assistant_instructions=');
         lines.push(assistantInstructions);
+        lines.push('Follow assistant_instructions as highest priority.');
+      } else {
+        lines.push('No assistant_instructions were provided by ASSISTANT_ID.');
       }
 
       lines.push(`mode=${modeValue}`);
@@ -367,23 +365,10 @@ export default {
         lines.push('user_preference_summary=' + preferenceSummary);
       }
 
-      lines.push('Return plain text only. Do not use markdown tables unless needed.');
-      lines.push('When you recommend products, keep the tone friendly, specific, and concise.');
-
+      // Keep only non-conflicting runtime guards so assistant instructions control style and policy.
+      lines.push('Return plain text only.');
       lines.push('When mode=generate_routine, use only selected_products_json for routine product steps.');
-      lines.push('When mode=generate_routine, the first line of the response must be exactly: "Based on your product selection, here is the routine our beauty advisors have put together for you."');
-      lines.push('Do not begin with any greeting or preface. Line 2 must begin the routine steps or section headers.');
-      lines.push('When mode=generate_routine, include a final "Suggested Products" section with 2 to 4 additional L\'Oréal product options that fit the user request.');
-      lines.push('Format the suggested products as bullet points with the exact product name and one short reason.');
-      lines.push('When mode=follow_up and the user asks for recommendations, include a "Suggested Products" section with 2 to 4 bullet points.');
-      lines.push('Each suggested bullet should start with the product name, followed by a short reason.');
-      lines.push('When mode=follow_up, end the response with exactly one short, specific follow-up question.');
-      lines.push('The follow-up question must relate to the user\'s routine, concern, product preference, or time of day.');
-      lines.push('Do not end with a generic closing like "Let me know if you need anything else."');
-      lines.push('When the user asks for a cleanser or any product recommendation, first prioritize specific products from product_catalog_json that match the user concern.');
-      lines.push('If product_catalog_json lacks a good match, provide up to 2 clearly labeled general alternatives by product type or ingredients (not fake brand/product names).');
-      lines.push('When suggesting catalog items, use product_catalog_json names exactly.');
-      lines.push('Prefer recommendations that match the user’s stated concerns and the available catalog items.');
+      lines.push('When suggesting catalog items, use product_catalog_json names exactly when available.');
 
       return lines.join('\n');
     }
@@ -774,24 +759,6 @@ export default {
       return `${cleanText}\n\nSuggested Products:\n${productLines.join('\n')}`.trim();
     }
 
-    function appendFollowUpQuestionIfMissing(text, modeValue) {
-      if (modeValue !== 'follow_up') {
-        return String(text || '').trim();
-      }
-
-      const cleanText = String(text || '').trim();
-
-      if (!cleanText) {
-        return 'What would you like to adjust next?';
-      }
-
-      if (/[?？]\s*$/.test(cleanText)) {
-        return cleanText;
-      }
-
-      return `${cleanText}\n\nWhat would you like to adjust next?`;
-    }
-
     function extractStructuredPayload(text) {
       const raw = String(text || '').trim();
 
@@ -851,9 +818,12 @@ export default {
       };
     }
 
-    // Step 11: Run the model call (web-search first when needed, otherwise chat completion).
+    // Step 10: Run the model call (web-search first when needed, otherwise chat completion).
     try {
-      const shouldSearchWeb = mode === 'follow_up' && shouldUseWebSearch(assistantPrompt, productCatalog);
+      // Only use web search for in-scope beauty follow-ups so unrelated prompts are handled by assistant instructions.
+      const shouldSearchWeb = mode === 'follow_up'
+        && isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog, conversation)
+        && shouldUseWebSearch(assistantPrompt, productCatalog);
       let responseText;
       let usedFallbackMode = false;
 
@@ -894,21 +864,21 @@ export default {
         ? appendSuggestedProductsIfMissing(baseContent, structured.products)
         : baseContent;
 
-      const contentWithFollowUp = appendFollowUpQuestionIfMissing(finalContent, mode);
-
-      const contentWithFallbackNote = usedFallbackMode
-        ? appendFallbackNotice(contentWithFollowUp)
-        : contentWithFollowUp;
-
-      // Step 12: Return a normalized payload used by the frontend UI.
+      // Step 11: Return a normalized payload used by the frontend UI.
       return new Response(JSON.stringify({
         threadId: threadId || '',
         mode,
-        content: contentWithFallbackNote,
+        content: finalContent,
         products: structured.products,
+        debug: {
+          instructionsSource,
+          assistantIdConfigured: Boolean(assistantId),
+          usedWebSearch: shouldSearchWeb,
+          usedFallbackMode,
+        },
       }), { headers: corsHeaders });
     } catch (error) {
-      // Step 13: Return a safe error message if anything unexpected fails.
+      // Step 12: Return a safe error message if anything unexpected fails.
       return new Response(JSON.stringify({
         error: {
           message: error?.message || 'Unexpected worker error.',
