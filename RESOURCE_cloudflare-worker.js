@@ -27,6 +27,8 @@ export default {
     const apiBase = 'https://api.openai.com/v1';
 
     let assistantInstructionsCache = null;
+    let assistantFetchStatus = null;
+    let assistantFetchError = '';
 
     // Step 5: Load Assistant instructions (if provided) and cache them per request.
     async function getAssistantInstructions() {
@@ -41,12 +43,15 @@ export default {
       try {
         const response = await fetch(`${apiBase}/assistants/${assistantId}`, {
           method: 'GET',
-          headers: openAiHeaders,
+          headers: assistantsApiHeaders,
         });
+
+        assistantFetchStatus = response.status;
 
         const data = await response.json();
 
         if (!response.ok) {
+          assistantFetchError = String(data?.error?.message || `Assistants fetch failed with status ${response.status}`);
           assistantInstructionsCache = '';
           return '';
         }
@@ -54,6 +59,7 @@ export default {
         assistantInstructionsCache = typeof data?.instructions === 'string' ? data.instructions.trim() : '';
         return assistantInstructionsCache;
       } catch (error) {
+        assistantFetchError = String(error?.message || 'Unknown assistant fetch error');
         assistantInstructionsCache = '';
         return '';
       }
@@ -95,6 +101,11 @@ export default {
     const openAiHeaders = {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
+    };
+
+    const assistantsApiHeaders = {
+      ...openAiHeaders,
+      'OpenAI-Beta': 'assistants=v2',
     };
 
     // Optional diagnostics for frontend debugging (no secrets included).
@@ -872,7 +883,11 @@ export default {
         products: structured.products,
         debug: {
           instructionsSource,
+          assistantInstructionsLoaded: Boolean(loadedAssistantInstructions),
+          assistantInstructionsLength: loadedAssistantInstructions.length,
           assistantIdConfigured: Boolean(assistantId),
+          assistantFetchStatus,
+          assistantFetchError,
           usedWebSearch: shouldSearchWeb,
           usedFallbackMode,
         },
