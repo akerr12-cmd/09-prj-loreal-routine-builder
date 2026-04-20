@@ -51,7 +51,7 @@ export default {
       return new Response(JSON.stringify({ error: { message: 'Missing user message.' } }), { status: 400, headers: corsHeaders });
     }
 
-    if (mode === 'follow_up' && !isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog, conversation)) {
+    if (mode === 'follow_up' && !isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog)) {
       return new Response(JSON.stringify({
         error: {
           message: 'Follow-up questions must be about your generated routine or beauty topics like skincare, haircare, makeup, and fragrance.',

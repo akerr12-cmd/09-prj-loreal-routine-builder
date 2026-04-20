@@ -7,6 +7,13 @@ const productsCarouselNext = document.getElementById("productsCarouselNext");
 const selectedCountText = document.getElementById("selectedCountText");
 const saveSelectedProductsButton = document.getElementById("saveSelectedProductsBtn");
 const generateRoutineButton = document.getElementById("generateRoutine");
+const menuButton = document.getElementById("menuButton");
+const menuPanel = document.getElementById("menuPanel");
+const newRoutineMenuBtn = document.getElementById("newRoutineMenuBtn");
+const downloadRoutineMenuBtn = document.getElementById("downloadRoutineMenuBtn");
+const downloadAtelierMenuBtn = document.getElementById("downloadAtelierMenuBtn");
+const instructionsMenuBtn = document.getElementById("instructionsMenuBtn");
+const instructionsPanel = document.getElementById("instructionsPanel");
 const routineOutput = document.getElementById("routineOutput");
 const saveRoutineButton = document.getElementById("saveRoutineBtn");
 const savedProductsGrid = document.getElementById("savedProductsGrid");
@@ -56,6 +63,8 @@ let carouselDragStartScrollLeft = 0;
 let carouselPointerId = null;
 let suppressProductClickOnce = false;
 let hasCarouselDragMoved = false;
+let isMenuOpen = false;
+let isInstructionsOpen = false;
 
 /* Scroll product carousel by one card track */
 function scrollProductCarousel(direction) {
@@ -139,6 +148,43 @@ function updateCarouselControlsState() {
   productsCarouselNext.hidden = !shouldShowControls;
   productsCarouselPrev.disabled = !hasOverflow;
   productsCarouselNext.disabled = !hasOverflow;
+}
+
+function setMenuOpen(nextIsOpen) {
+  isMenuOpen = nextIsOpen;
+
+  if (menuButton) {
+    menuButton.setAttribute("aria-expanded", String(nextIsOpen));
+  }
+
+  if (menuPanel) {
+    menuPanel.hidden = !nextIsOpen;
+  }
+}
+
+function toggleMenu() {
+  setMenuOpen(!isMenuOpen);
+}
+
+function closeMenu() {
+  setMenuOpen(false);
+  setInstructionsOpen(false);
+}
+
+function setInstructionsOpen(nextIsOpen) {
+  isInstructionsOpen = nextIsOpen;
+
+  if (instructionsMenuBtn) {
+    instructionsMenuBtn.setAttribute("aria-expanded", String(nextIsOpen));
+  }
+
+  if (instructionsPanel) {
+    instructionsPanel.hidden = !nextIsOpen;
+  }
+}
+
+function toggleInstructions() {
+  setInstructionsOpen(!isInstructionsOpen);
 }
 
 /* Show initial placeholder until user selects a category */
@@ -788,6 +834,112 @@ function saveRoutineToFile() {
   addChatMessage("ai", "Your routine has been saved as a text file.");
 }
 
+function getAtelierTextForSave() {
+  const lines = [
+    "L'Oreal Product Atelier",
+    `Saved on: ${new Date().toLocaleString()}`,
+    "",
+  ];
+
+  const savedProductsOnly = uniqueProducts(savedProducts);
+  const selectedProductsOnly = uniqueProducts(selectedProducts);
+
+  if (selectedProductsOnly.length) {
+    lines.push("Current Selection");
+    selectedProductsOnly.forEach((product, index) => {
+      lines.push(`${index + 1}. ${product.name} - ${product.brand}`);
+    });
+    lines.push("");
+  }
+
+  if (savedProductsOnly.length) {
+    lines.push("Saved Products");
+    savedProductsOnly.forEach((product, index) => {
+      lines.push(`${index + 1}. ${product.name} - ${product.brand}`);
+    });
+    lines.push("");
+  }
+
+  if (suggestedRoutineProducts.length) {
+    lines.push("Suggested Products");
+    suggestedRoutineProducts.forEach((product, index) => {
+      const productName = String(product?.name || "").trim();
+      if (productName) {
+        lines.push(`${index + 1}. ${productName}`);
+      }
+    });
+    lines.push("");
+  }
+
+  return lines.join("\n").trim();
+}
+
+function saveAtelierToFile() {
+  const atelierText = getAtelierTextForSave();
+
+  if (!atelierText) {
+    addChatMessage("ai", "Add or save products to The Product Atelier before downloading it.");
+    return;
+  }
+
+  const blob = new Blob([atelierText], { type: "text/plain;charset=utf-8" });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = downloadUrl;
+  link.download = `loreal-product-atelier-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(downloadUrl);
+
+  addChatMessage("ai", "The Product Atelier has been saved as a text file.");
+}
+
+function startNewRoutine() {
+  selectedProducts = [];
+  expandedProducts = [];
+  suggestedRoutineProducts = [];
+  conversationThreadId = "";
+  hasGeneratedRoutine = false;
+  beautyPreferences = {
+    skinType: "",
+    sensitivity: false,
+    concerns: [],
+  };
+  searchQuery = "";
+
+  if (categoryFilter) {
+    categoryFilter.value = "";
+  }
+
+  if (productSearch) {
+    productSearch.value = "";
+  }
+
+  if (currentProducts.length > 0) {
+    productsContainer.innerHTML = `
+      <div class="placeholder-message">
+        Select a category to view products
+      </div>
+    `;
+  }
+
+  routineOutput.innerHTML = `
+    <p class="routine-placeholder">Select products and generate your routine to see your editorial flow.</p>
+  `;
+
+  chatWindow.innerHTML = "";
+  addChatMessage("ai", "Welcome. Select products and generate your personalized beauty routine.");
+
+  saveRoutineButton.disabled = true;
+  updateSelectedCount();
+  updateSaveSelectedButtonState();
+  updateCarouselControlsState();
+  renderSavedProducts();
+  closeMenu();
+}
+
 /* Render personalized routine as AI note only */
 async function generatePersonalizedRoutine() {
   if (selectedProducts.length === 0) {
@@ -834,6 +986,20 @@ function displayProducts(products) {
       (product) => `
     <div class="product-card ${selectedProducts.some((item) => item.id === product.id) ? "selected" : ""} ${expandedProducts.includes(product.id) ? "expanded" : ""} ${isProductSearchMatch(product) ? "search-match" : "search-dim"}" data-id="${product.id}">
       <span class="editorial-corner" aria-hidden="true"></span>
+      ${isProductSearchMatch(product)
+        ? `
+      <div class="product-main product-main-search-match">
+        <div class="product-info product-info-search-match">
+          <h3 class="product-name">${product.name}</h3>
+        </div>
+        <img src="${product.image}" alt="${product.name}">
+        <p class="product-brand">${product.brand}</p>
+        <button class="product-description-trigger" type="button" data-id="${product.id}" aria-label="Open description for ${escapeHtml(product.name)}">
+          Product Description
+        </button>
+      </div>
+      `
+        : `
       <div class="product-main">
         <img src="${product.image}" alt="${product.name}">
         <div class="product-info">
@@ -844,6 +1010,7 @@ function displayProducts(products) {
           </button>
         </div>
       </div>
+      `}
       <div class="product-description-popout" ${expandedProducts.includes(product.id) ? "" : "hidden"}>
         <button class="product-description-close" type="button" data-id="${product.id}" aria-label="Close description for ${escapeHtml(product.name)}">
           <i class="fa-solid fa-xmark" aria-hidden="true"></i>
@@ -988,6 +1155,48 @@ renderSavedProducts();
 updateCarouselControlsState();
 
 addChatMessage("ai", "Welcome. Select products and generate your personalized beauty routine.");
+
+if (menuButton && menuPanel) {
+  menuButton.addEventListener("click", () => {
+    toggleMenu();
+  });
+
+  newRoutineMenuBtn?.addEventListener("click", () => {
+    closeMenu();
+    startNewRoutine();
+  });
+
+  instructionsMenuBtn?.addEventListener("click", () => {
+    toggleInstructions();
+  });
+
+  downloadRoutineMenuBtn?.addEventListener("click", () => {
+    closeMenu();
+    saveRoutineToFile();
+  });
+
+  downloadAtelierMenuBtn?.addEventListener("click", () => {
+    closeMenu();
+    saveAtelierToFile();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!isMenuOpen) {
+      return;
+    }
+
+    const clickedInsideMenu = menuPanel.contains(event.target) || menuButton.contains(event.target);
+    if (!clickedInsideMenu) {
+      closeMenu();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeMenu();
+    }
+  });
+}
 
 /* Generate button creates an editorial routine timeline */
 generateRoutineButton.addEventListener("click", () => {

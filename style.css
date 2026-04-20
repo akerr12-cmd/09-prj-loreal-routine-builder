@@ -86,6 +86,104 @@ body {
   margin-bottom: 18px;
 }
 
+.header-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.menu-wrap {
+  position: relative;
+}
+
+.menu-toggle {
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background:
+    linear-gradient(#faf9f7, #faf9f7) padding-box,
+    linear-gradient(140deg, #e3a535, #f3e9d8) border-box;
+  color: #161616;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  transition: transform 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.menu-toggle:hover,
+.menu-toggle:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  color: #ff003b;
+}
+
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  min-width: 240px;
+  padding: 10px;
+  border: 1.5px solid transparent;
+  border-radius: 14px;
+  background:
+    linear-gradient(#faf9f7, #faf9f7) padding-box,
+    linear-gradient(140deg, #e3a535, #f3e9d8) border-box;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.14);
+  z-index: 40;
+}
+
+.menu-panel-item {
+  width: 100%;
+  display: block;
+  padding: 12px 14px;
+  margin: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #161616;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.menu-panel-item:hover,
+.menu-panel-item:focus-visible {
+  background: rgba(227, 165, 53, 0.12);
+  color: #ff003b;
+  transform: translateX(2px);
+}
+
+.menu-instructions {
+  margin-top: 8px;
+  padding: 12px 14px 4px;
+  border-top: 1px solid rgba(227, 165, 53, 0.18);
+}
+
+.menu-instructions h2 {
+  font-family: "Playfair Display", "Times New Roman", serif;
+  font-size: 16px;
+  margin-bottom: 10px;
+  color: #161616;
+  text-align: left;
+}
+
+.menu-instructions .usage-guide-list {
+  padding-left: 18px;
+  color: #333;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.menu-instructions .usage-guide-list li + li {
+  margin-top: 8px;
+}
+
 .hero-panel {
   position: relative;
   isolation: isolate;
@@ -473,12 +571,14 @@ body {
 /* input row */
 .chat-form {
   display: flex;
+  align-items: stretch;
   gap: 12px;
   margin-top: 16px;
 }
 
 .chat-form input {
   flex: 1;
+  min-width: 0;
   padding: 12px 14px;
   font-size: 18px;
   border: 1.5px solid transparent;
@@ -510,6 +610,7 @@ body {
   color: #fff;
   border: none;
   padding: 12px;
+  flex: none;
   width: 48px;
   height: 48px;
   display: flex;
@@ -678,6 +779,40 @@ body {
 .product-main {
   display: flex;
   gap: 15px;
+  min-width: 0;
+}
+
+.product-main-search-match {
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: 10px;
+}
+
+.product-main-search-match .product-info-search-match {
+  display: contents;
+}
+
+.product-main-search-match .product-name {
+  justify-self: start;
+}
+
+.product-main-search-match img {
+  width: 128px;
+  height: 128px;
+}
+
+.product-main-search-match .product-brand {
+  justify-self: start;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  color: #666;
+}
+
+.product-main-search-match .product-description-trigger {
+  justify-self: start;
+  margin-top: 0;
 }
 
 .product-card::before {
@@ -810,12 +945,14 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  min-width: 0;
   min-height: 110px;
 }
 
 .product-description-trigger {
   margin-top: 8px;
   align-self: flex-start;
+  max-width: 100%;
   border: 1px solid transparent;
   border-radius: 999px;
   padding: 5px 10px;
@@ -825,6 +962,9 @@ body {
   color: #181818;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
   letter-spacing: 0.01em;
   cursor: pointer;
   transition: transform 150ms ease, box-shadow 150ms ease, color 150ms ease;
@@ -844,6 +984,7 @@ body {
 .product-card h3 {
   font-size: 16px;
   margin-bottom: 4px;
+  overflow-wrap: anywhere;
 }
 
 .product-card p {
@@ -851,10 +992,19 @@ body {
   color: #666;
 }
 
+.product-card.search-match {
+  min-height: 0;
+}
+
+.product-card.search-match .product-description-popout {
+  margin-top: 6px;
+}
+
 .product-name {
   position: relative;
   display: inline-block;
   width: fit-content;
+  max-width: 100%;
   margin-bottom: 6px;
 }
 
@@ -1302,7 +1452,7 @@ body {
   }
 
   .products-carousel {
-    padding: 0 34px;
+    padding: 0 28px;
   }
 
   .carousel-nav {
@@ -1311,7 +1461,7 @@ body {
   }
 
   .products-grid {
-    grid-auto-columns: minmax(220px, 84%);
+    grid-auto-columns: minmax(230px, 90%);
   }
 
   .product-description-popout {
@@ -1321,6 +1471,60 @@ body {
     bottom: -10px;
     width: 100%;
     transform: translateY(100%);
+  }
+}
+
+@media (max-width: 380px) {
+  .products-carousel {
+    padding: 0 24px;
+  }
+
+  .products-grid {
+    grid-auto-columns: minmax(210px, 92%);
+  }
+
+  .product-card {
+    padding: 12px;
+  }
+
+  .product-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .product-card img {
+    width: 84px;
+    height: 84px;
+  }
+
+  .product-card .product-info {
+    width: 100%;
+    min-height: 0;
+  }
+
+  .product-card h3 {
+    font-size: 15px;
+    line-height: 1.25;
+  }
+
+  .chat-form {
+    gap: 8px;
+  }
+
+  .chat-form input {
+    font-size: 16px;
+    padding: 11px 12px;
+  }
+
+  .chat-form input::placeholder {
+    font-size: 15px;
+  }
+
+  .chat-form button {
+    width: 44px;
+    height: 44px;
+    font-size: 16px;
   }
 }
 
@@ -1341,6 +1545,22 @@ body {
 }
 
 @media (max-width: 640px) {
+  .header-actions {
+    justify-content: center;
+  }
+
+  .menu-panel {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(280px, calc(100vw - 28px));
+  }
+
+  .menu-instructions {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
   .products-actions {
     margin-bottom: 20px;
   }
@@ -1386,11 +1606,6 @@ body {
 
   .atelier-status-badge {
     align-self: flex-start;
-  }
-
-  .saved-product-item {
-    align-items: flex-start;
-    flex-direction: column;
   }
 }
 
