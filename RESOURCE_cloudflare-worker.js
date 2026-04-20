@@ -644,7 +644,7 @@ export default {
       const normalized = String(text || '').replace(/\r\n/g, '\n');
       const headingRegex = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:suggested|recommended)\s+products?\s*:?\s*(?:\*\*)?\s*\n([\s\S]*)/i;
       const headingMatch = normalized.match(headingRegex);
-      const section = headingMatch ? headingMatch[1] : normalized;
+      const section = headingMatch ? headingMatch[1] : "";
       const lines = section.split('\n');
       const products = [];
       const seen = new Set();
