@@ -34,6 +34,7 @@ body {
   overflow: hidden;
   pointer-events: none;
   opacity: 0.85;
+  display: none;
 }
 
 .beauty-genome-spine::before {
@@ -343,8 +344,8 @@ body {
 
 .search-section select {
   width: 100%;
-  padding: 16px 46px 16px 16px;
-  font-size: 18px;
+  padding: 15px 36px 15px 16px;
+  font-size: 16px;
   border: 1.5px solid transparent;
   border-radius: 10px;
   cursor: pointer;
@@ -386,6 +387,19 @@ body {
 .search-bar-wrap {
   margin: 14px 0 24px;
   position: relative;
+}
+
+@media (min-width: 768px) {
+  .search-controls-row {
+    grid-template-columns: minmax(240px, 30%) minmax(0, 1fr);
+    align-items: center;
+    gap: 14px;
+  }
+
+  .search-controls-row .search-section,
+  .search-controls-row .search-bar-wrap {
+    margin: 0;
+  }
 }
 
 @media (min-width: 900px) {
@@ -1471,6 +1485,10 @@ body {
     bottom: -10px;
     width: 100%;
     transform: translateY(100%);
+  }
+
+  .search-section select {
+    padding: 15px 28px 15px 16px;
   }
 }
 
