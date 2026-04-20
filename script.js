@@ -639,6 +639,12 @@ function renderRoutineEditorialSummary(summaryText) {
     placeholder.remove();
   }
 
+  // Find and remove the previous AI-generated note to avoid duplicating content.
+  const existingNote = routineOutput.querySelector(".routine-ai-note");
+  if (existingNote) {
+    existingNote.remove();
+  }
+
   const note = document.createElement("article");
   note.className = "routine-ai-note";
   note.textContent = stripSuggestedProductsFromRoutineText(summaryText);
