@@ -411,6 +411,50 @@ function renderRoutineEditorialSummary(summaryText) {
   routineOutput.appendChild(note);
 }
 
+/* Add AI-suggested product options below the routine timeline */
+function renderSuggestedRoutineProducts(products) {
+  const existingSection = routineOutput.querySelector(".routine-suggested-section");
+  if (existingSection) {
+    existingSection.remove();
+  }
+
+  if (!Array.isArray(products) || products.length === 0) {
+    return;
+  }
+
+  const section = document.createElement("article");
+  section.className = "routine-suggested-section";
+
+  const title = document.createElement("h3");
+  title.className = "routine-suggested-title";
+  title.textContent = "Suggested Products";
+
+  const intro = document.createElement("p");
+  intro.className = "routine-suggested-intro";
+  intro.textContent = "Additional L'Oréal options the advisor recommends for this routine.";
+
+  const list = document.createElement("div");
+  list.className = "routine-suggested-list";
+
+  products.forEach((product, index) => {
+    const item = document.createElement("article");
+    item.className = "routine-suggested-item";
+    item.dataset.productName = product.name;
+
+    const name = document.createElement("p");
+    name.className = "routine-suggested-name";
+    name.textContent = `${index + 1}. ${product.name}`;
+
+    item.appendChild(name);
+    list.appendChild(item);
+  });
+
+  section.appendChild(title);
+  section.appendChild(intro);
+  section.appendChild(list);
+  routineOutput.appendChild(section);
+}
+
 /* Keep selected count visible in the unified products area */
 function updateSelectedCount() {
   if (!selectedCountText) {
@@ -529,6 +573,18 @@ function getRoutineTextForSave() {
     }
     lines.push("");
   });
+
+  const suggestedItems = routineOutput.querySelectorAll(".routine-suggested-item");
+  if (suggestedItems.length) {
+    lines.push("Suggested Products");
+    suggestedItems.forEach((item, index) => {
+      const name = String(item.dataset.productName || "").trim();
+      if (name) {
+        lines.push(`${index + 1}. ${name}`);
+      }
+    });
+    lines.push("");
+  }
 
   const aiSummary = routineOutput.querySelector(".routine-ai-note")?.textContent?.trim() || "";
   if (aiSummary) {
@@ -660,6 +716,7 @@ async function generatePersonalizedRoutine() {
     removeThinkingIndicator();
 
     const advisorText = routineResponse.content || "Your routine is ready in the editorial timeline above.";
+    renderSuggestedRoutineProducts(routineResponse.products || []);
     addChatMessage("ai", advisorText);
     renderRoutineEditorialSummary(advisorText);
   } catch (error) {

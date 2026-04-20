@@ -56,6 +56,91 @@ export default {
       'Content-Type': 'application/json'
     };
 
+    function normalizeTextForSearch(text) {
+      return String(text || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function getSearchKeywords(text) {
+      const normalized = normalizeTextForSearch(text);
+      const words = normalized.split(' ').filter(Boolean);
+      const stopWords = new Set([
+        'the', 'and', 'for', 'with', 'that', 'this', 'what', 'which', 'from', 'your', 'you', 'are', 'was', 'were',
+        'have', 'has', 'had', 'need', 'want', 'show', 'tell', 'about', 'please', 'product', 'products', 'loreal',
+        'l', 'oreal', 'loreals', 'make', 'made', 'good', 'best', 'new', 'other', 'more', 'any', 'some', 'one', 'two'
+      ]);
+
+      return Array.from(new Set(words.filter((word) => word.length > 2 && !stopWords.has(word)))).slice(0, 12);
+    }
+
+    function scoreCatalogProduct(product, keywords) {
+      const haystack = normalizeTextForSearch([
+        product.name,
+        product.brand,
+        product.category,
+        product.description,
+      ].join(' '));
+
+      let score = 0;
+
+      for (let i = 0; i < keywords.length; i += 1) {
+        if (haystack.includes(keywords[i])) {
+          score += 1;
+        }
+      }
+
+      return score;
+    }
+
+    function getRelevantCatalogMatches(userPrompt, products) {
+      const keywords = getSearchKeywords(userPrompt);
+
+      if (!keywords.length || !Array.isArray(products) || !products.length) {
+        return [];
+      }
+
+      return products
+        .map((product) => ({
+          product,
+          score: scoreCatalogProduct(product, keywords),
+        }))
+        .filter((item) => item.score > 0)
+        .sort((left, right) => right.score - left.score)
+        .slice(0, 3)
+        .map((item) => item.product);
+    }
+
+    function shouldUseWebSearch(userPrompt, products) {
+      if (!Array.isArray(products) || !products.length) {
+        return true;
+      }
+
+      const promptText = normalizeTextForSearch(userPrompt);
+      const searchSignals = [
+        'not in catalog',
+        'not in the catalog',
+        'other products',
+        'something else',
+        'similar products',
+        'web search',
+        'find products',
+        'recommend products',
+        'current products',
+        'latest products',
+      ];
+
+      for (let i = 0; i < searchSignals.length; i += 1) {
+        if (promptText.includes(searchSignals[i])) {
+          return true;
+        }
+      }
+
+      return getRelevantCatalogMatches(userPrompt, products).length === 0;
+    }
+
     function buildChatMessages(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
       const messages = [
         {
@@ -162,12 +247,155 @@ export default {
       lines.push('When mode=generate_routine, use only selected_products_json for routine product steps.');
       lines.push('When mode=generate_routine, the first line of the response must be exactly: "Based on your product selection, here is the routine our beauty advisors have put together for you."');
       lines.push('Do not begin with any greeting or preface. Line 2 must begin the routine steps or section headers.');
+      lines.push('When mode=generate_routine, include a final "Suggested Products" section with 2 to 4 additional L\'Oréal product options that fit the user request.');
+      lines.push('Format the suggested products as bullet points with the exact product name and one short reason.');
       lines.push('When the user asks for a cleanser or any product recommendation, first prioritize specific products from product_catalog_json that match the user concern.');
       lines.push('If product_catalog_json lacks a good match, provide up to 2 clearly labeled general alternatives by product type or ingredients (not fake brand/product names).');
       lines.push('When suggesting catalog items, use product_catalog_json names exactly.');
       lines.push('Prefer recommendations that match the user’s stated concerns and the available catalog items.');
 
       return lines.join('\n');
+    }
+
+    function buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      const lines = [
+        'User request: ' + userPrompt,
+        'Mode: ' + modeValue,
+      ];
+
+      if (productsValue.length) {
+        lines.push('Selected products JSON: ' + JSON.stringify(productsValue));
+      }
+
+      if (productCatalog.length) {
+        lines.push('Product catalog JSON: ' + JSON.stringify(productCatalog));
+      }
+
+      if (conversationValue.length) {
+        lines.push('Recent conversation JSON: ' + JSON.stringify(conversationValue));
+      }
+
+      if (preferenceSummary) {
+        lines.push('Preference summary: ' + preferenceSummary);
+      }
+
+      lines.push('Instructions:');
+      lines.push('- Search the web for current L\'Oréal products that match the user request.');
+      lines.push('- Prefer L\'Oréal official pages or trustworthy retailers when possible.');
+      lines.push('- Return 2 to 4 relevant L\'Oréal product suggestions if catalog matching is weak or missing.');
+      lines.push('- Do not invent product names.');
+      lines.push('- Include source URLs at the end as plain text under a Sources section.');
+
+      return lines.join('\n');
+    }
+
+    function extractResponseText(responseData) {
+      const outputText = typeof responseData?.output_text === 'string' ? responseData.output_text.trim() : '';
+      if (outputText) {
+        return outputText;
+      }
+
+      const output = Array.isArray(responseData?.output) ? responseData.output : [];
+      const textParts = [];
+
+      for (let i = 0; i < output.length; i += 1) {
+        const contentBlocks = Array.isArray(output[i]?.content) ? output[i].content : [];
+
+        for (let j = 0; j < contentBlocks.length; j += 1) {
+          const block = contentBlocks[j] || {};
+          const textValue = typeof block?.text === 'string'
+            ? block.text
+            : String(block?.text?.value || '').trim();
+
+          if (textValue) {
+            textParts.push(textValue);
+          }
+        }
+      }
+
+      return textParts.join('\n\n').trim();
+    }
+
+    function extractWebCitations(responseData) {
+      const urls = [];
+      const seen = new Set();
+      const output = Array.isArray(responseData?.output) ? responseData.output : [];
+
+      for (let i = 0; i < output.length; i += 1) {
+        const contentBlocks = Array.isArray(output[i]?.content) ? output[i].content : [];
+
+        for (let j = 0; j < contentBlocks.length; j += 1) {
+          const annotations = Array.isArray(contentBlocks[j]?.annotations) ? contentBlocks[j].annotations : [];
+
+          for (let k = 0; k < annotations.length; k += 1) {
+            const url = String(annotations[k]?.url || '').trim();
+            if (!url || seen.has(url)) {
+              continue;
+            }
+
+            seen.add(url);
+            urls.push(url);
+
+            if (urls.length >= 6) {
+              return urls;
+            }
+          }
+        }
+      }
+
+      return urls;
+    }
+
+    function appendSourcesIfMissing(text, citations) {
+      const cleanText = String(text || '').trim();
+      const links = Array.isArray(citations) ? citations.filter(Boolean) : [];
+
+      if (!links.length || /\bSources\s*:/i.test(cleanText)) {
+        return cleanText;
+      }
+
+      return `${cleanText}\n\nSources:\n${links.join('\n')}`.trim();
+    }
+
+    async function createWebSearchCompletion(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      const response = await fetch(`${apiBase}/responses`, {
+        method: 'POST',
+        headers: openAiHeaders,
+        body: JSON.stringify({
+          model: openAiModel,
+          tools: [{ type: 'web_search_preview' }],
+          input: [
+            {
+              role: 'system',
+              content: [
+                {
+                  type: 'input_text',
+                  text: buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary),
+                },
+              ],
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
+                },
+              ],
+            },
+          ],
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error?.message || 'Failed to create web search response.');
+      }
+
+      const content = extractResponseText(data);
+      const citations = extractWebCitations(data);
+      return appendSourcesIfMissing(content, citations);
     }
 
     function normalizeCatalog(products) {
@@ -454,13 +682,36 @@ export default {
     }
 
     try {
-      const responseText = await createChatCompletion(
-        mode,
-        selectedProducts,
-        conversation,
-        preferences,
-        assistantPrompt
-      );
+      const shouldSearchWeb = shouldUseWebSearch(assistantPrompt, productCatalog);
+      let responseText;
+
+      if (shouldSearchWeb) {
+        try {
+          responseText = await createWebSearchCompletion(
+            mode,
+            selectedProducts,
+            conversation,
+            preferences,
+            assistantPrompt
+          );
+        } catch (searchError) {
+          responseText = await createChatCompletion(
+            mode,
+            selectedProducts,
+            conversation,
+            preferences,
+            assistantPrompt
+          );
+        }
+      } else {
+        responseText = await createChatCompletion(
+          mode,
+          selectedProducts,
+          conversation,
+          preferences,
+          assistantPrompt
+        );
+      }
 
       const structured = extractStructuredPayload(responseText);
       const finalContent = mode === 'generate_routine'
