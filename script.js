@@ -628,15 +628,39 @@ function stripSuggestedProductsFromRoutineText(text) {
 }
 
 function renderRoutineEditorialSummary(summaryText) {
-  const existingSummary = routineOutput.querySelector(".routine-ai-note");
-  if (existingSummary) {
-    existingSummary.remove();
+  const placeholder = routineOutput.querySelector(".routine-placeholder");
+  if (placeholder) {
+    placeholder.remove();
   }
 
   const note = document.createElement("article");
   note.className = "routine-ai-note";
   note.textContent = stripSuggestedProductsFromRoutineText(summaryText);
   routineOutput.appendChild(note);
+}
+
+/* Keep the user's last question visible in the routine panel during mid-conversation updates */
+function renderRoutineQuestionContext() {
+  const bubbles = chatWindow.querySelectorAll(".chat-bubble.user");
+  const lastUserBubble = bubbles.length ? bubbles[bubbles.length - 1] : null;
+  const questionText = lastUserBubble ? lastUserBubble.textContent.trim() : "";
+
+  if (!questionText) {
+    return;
+  }
+
+  const existingQuestion = routineOutput.querySelector(".routine-user-question");
+  if (existingQuestion) {
+    existingQuestion.remove();
+  }
+
+  const question = document.createElement("article");
+  question.className = "routine-user-question";
+  question.innerHTML = `
+    <p class="routine-user-question-label">Previous Question</p>
+    <p class="routine-user-question-text">${escapeHtml(questionText)}</p>
+  `;
+  routineOutput.appendChild(question);
 }
 
 /* Normalize names so routine suggestions can be matched against selected products */
@@ -705,6 +729,7 @@ async function addSuggestedProductToRoutine(productName) {
 
   addChatMessage("ai", `${productToAdd.name} has been added to your routine.`);
   await generatePersonalizedRoutine();
+  renderRoutineQuestionContext();
 }
 
 /* Add all currently suggested products to the active routine at once */
@@ -757,6 +782,7 @@ async function addAllSuggestedProductsToRoutine() {
 
   addChatMessage("ai", `${addedCount} suggested product${addedCount === 1 ? "" : "s"} were added to your routine.`);
   await generatePersonalizedRoutine();
+  renderRoutineQuestionContext();
 }
 
 /* Keep selected count visible in the unified products area */
@@ -1104,7 +1130,10 @@ async function generatePersonalizedRoutine() {
     return;
   }
 
-  routineOutput.innerHTML = "";
+  const placeholder = routineOutput.querySelector(".routine-placeholder");
+  if (placeholder) {
+    placeholder.remove();
+  }
   suggestedRoutineProducts = [];
   renderSavedProducts();
   hasGeneratedRoutine = true;
@@ -1122,6 +1151,7 @@ async function generatePersonalizedRoutine() {
     commitSelectedProductsToCuratedEdit();
     renderSavedProducts();
     addChatMessage("ai", advisorText);
+    renderRoutineQuestionContext();
     renderRoutineEditorialSummary(advisorText);
   } catch (error) {
     removeThinkingIndicator();
@@ -1430,6 +1460,7 @@ chatForm.addEventListener("submit", async (e) => {
     }
     renderSavedProducts();
     addChatMessage("ai", chatResponse.content || "I can help refine your beauty routine.");
+    renderRoutineEditorialSummary(chatResponse.content || "I can help refine your beauty routine.");
   } catch (error) {
     removeThinkingIndicator();
     addChatMessage("ai", `I couldn't connect to the routine advisor right now. ${error.message}`);
