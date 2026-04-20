@@ -730,9 +730,9 @@ function removeSavedProduct(productId) {
 
 /* Build routine text for download */
 function getRoutineTextForSave() {
-  const stepCards = routineOutput.querySelectorAll(".routine-step-card");
+  const aiSummary = routineOutput.querySelector(".routine-ai-note")?.textContent?.trim() || "";
 
-  if (!stepCards.length) {
+  if (!aiSummary) {
     return "";
   }
 
@@ -740,23 +740,13 @@ function getRoutineTextForSave() {
     "L'Oreal Personalized Routine",
     `Saved on: ${new Date().toLocaleString()}`,
     "",
-    "Routine Steps",
+    "Selected Products",
   ];
 
-  stepCards.forEach((card, index) => {
-    const title = card.querySelector(".routine-step-title")?.textContent?.trim() || "";
-    const brand = card.querySelector(".routine-step-brand")?.textContent?.trim() || "";
-    const guidance = card.querySelector(".routine-step-guidance")?.textContent?.trim() || "";
-
-    lines.push(`${index + 1}. ${title}`);
-    if (brand) {
-      lines.push(`   Brand: ${brand}`);
-    }
-    if (guidance) {
-      lines.push(`   ${guidance}`);
-    }
-    lines.push("");
+  selectedProducts.forEach((product, index) => {
+    lines.push(`${index + 1}. ${product.name} - ${product.brand}`);
   });
+  lines.push("");
 
   if (suggestedRoutineProducts.length) {
     lines.push("Suggested Products");
@@ -769,11 +759,8 @@ function getRoutineTextForSave() {
     lines.push("");
   }
 
-  const aiSummary = routineOutput.querySelector(".routine-ai-note")?.textContent?.trim() || "";
-  if (aiSummary) {
-    lines.push("AI Notes");
-    lines.push(aiSummary);
-  }
+  lines.push("AI Notes");
+  lines.push(aiSummary);
 
   return lines.join("\n").trim();
 }
@@ -801,65 +788,7 @@ function saveRoutineToFile() {
   addChatMessage("ai", "Your routine has been saved as a text file.");
 }
 
-/* Infer routine phase so products can be sorted in a practical order */
-function getRoutinePhase(product) {
-  const category = product.category;
-
-  if (category === "cleanser") {
-    return "prep";
-  }
-
-  if (category === "moisturizer" || category === "suncare") {
-    return "protect";
-  }
-
-  if (category === "haircare" || category === "hair styling" || category === "hair color") {
-    return "style";
-  }
-
-  return "enhance";
-}
-
-/* Build each routine step with icon and short editorial guidance */
-function buildRoutineStep(product, stepNumber) {
-  const phase = getRoutinePhase(product);
-  const isActiveStep = stepNumber === 1;
-
-  let stepTitle = "Enhance";
-  let iconClass = "fa-sparkles";
-  let guidance = `Apply ${product.name} to elevate your look.`;
-
-  if (phase === "prep") {
-    stepTitle = "Prep";
-    iconClass = "fa-droplet";
-    guidance = `Start with ${product.name} to cleanse and refresh your skin.`;
-  }
-
-  if (phase === "protect") {
-    stepTitle = "Protect";
-    iconClass = "fa-shield-heart";
-    guidance = `Layer ${product.name} to lock in comfort and hydration.`;
-  }
-
-  if (phase === "style") {
-    stepTitle = "Style";
-    iconClass = "fa-wand-magic-sparkles";
-    guidance = `Use ${product.name} to shape your final finish.`;
-  }
-
-  return `
-    <article class="routine-step-card ${isActiveStep ? "active" : ""}">
-      <span class="routine-step-number">${stepNumber}</span>
-      <div class="routine-step-content">
-        <h3 class="routine-step-title">${stepTitle}: ${product.name}</h3>
-        <p class="routine-step-brand">${product.brand}</p>
-        <p class="routine-step-guidance"><i class="fa-solid ${iconClass} routine-icon" aria-hidden="true"></i><span class="routine-guidance-text">${guidance}</span></p>
-      </div>
-    </article>
-  `;
-}
-
-/* Render personalized routine in editorial timeline format */
+/* Render personalized routine as AI note only */
 async function generatePersonalizedRoutine() {
   if (selectedProducts.length === 0) {
     routineOutput.innerHTML = `
@@ -870,24 +799,7 @@ async function generatePersonalizedRoutine() {
     return;
   }
 
-  const phaseOrder = {
-    prep: 1,
-    protect: 2,
-    style: 3,
-    enhance: 4,
-  };
-
-  const orderedProducts = [...selectedProducts].sort((a, b) => {
-    return phaseOrder[getRoutinePhase(a)] - phaseOrder[getRoutinePhase(b)];
-  });
-
-  routineOutput.innerHTML = `
-    <div class="routine-timeline">
-      ${orderedProducts
-        .map((product, index) => buildRoutineStep(product, index + 1))
-        .join("")}
-    </div>
-  `;
+  routineOutput.innerHTML = "";
   hasGeneratedRoutine = true;
   saveRoutineButton.disabled = false;
 
@@ -899,7 +811,7 @@ async function generatePersonalizedRoutine() {
     );
     removeThinkingIndicator();
 
-    const advisorText = routineResponse.content || "Your routine is ready in the editorial timeline above.";
+    const advisorText = routineResponse.content || "Your personalized routine note is ready.";
     suggestedRoutineProducts = Array.isArray(routineResponse.products) ? routineResponse.products : [];
     commitSelectedProductsToCuratedEdit();
     renderSavedProducts();
