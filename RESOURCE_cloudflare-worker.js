@@ -51,7 +51,7 @@ export default {
       return new Response(JSON.stringify({ error: { message: 'Missing user message.' } }), { status: 400, headers: corsHeaders });
     }
 
-    if (mode === 'follow_up' && !isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog)) {
+    if (mode === 'follow_up' && !isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog, conversation)) {
       return new Response(JSON.stringify({
         error: {
           message: 'Follow-up questions must be about your generated routine or beauty topics like skincare, haircare, makeup, and fragrance.',
@@ -149,7 +149,7 @@ export default {
       return getRelevantCatalogMatches(userPrompt, products).length === 0;
     }
 
-    function isAllowedFollowUpTopic(userPrompt, selectedProductsValue, catalogValue) {
+    function isAllowedFollowUpTopic(userPrompt, selectedProductsValue, catalogValue, conversationValue) {
       const promptText = normalizeTextForSearch(userPrompt);
 
       if (!promptText) {
@@ -171,6 +171,10 @@ export default {
         return true;
       }
 
+      if (conversationValue.length > 0 && /\b(this|that|it|they|them|these|those)\b/.test(promptText)) {
+        return true;
+      }
+
       const knownNames = [];
 
       for (let i = 0; i < selectedProductsValue.length; i += 1) {
@@ -188,6 +192,20 @@ export default {
       }
 
       return false;
+    }
+
+    function appendFallbackNotice(text) {
+      const cleanText = String(text || '').trim();
+
+      if (!cleanText) {
+        return 'Note: sources unavailable in fallback mode.';
+      }
+
+      if (/sources unavailable in fallback mode/i.test(cleanText)) {
+        return cleanText;
+      }
+
+      return `${cleanText}\n\nNote: sources unavailable in fallback mode.`.trim();
     }
 
     function buildChatMessages(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
@@ -734,6 +752,7 @@ export default {
     try {
       const shouldSearchWeb = shouldUseWebSearch(assistantPrompt, productCatalog);
       let responseText;
+      let usedFallbackMode = false;
 
       if (shouldSearchWeb) {
         try {
@@ -745,6 +764,7 @@ export default {
             assistantPrompt
           );
         } catch (searchError) {
+          usedFallbackMode = true;
           responseText = await createChatCompletion(
             mode,
             selectedProducts,
@@ -768,10 +788,14 @@ export default {
         ? enforceGenerateRoutineOpening(structured.answer || responseText)
         : (structured.answer || responseText);
 
+      const contentWithFallbackNote = usedFallbackMode
+        ? appendFallbackNotice(finalContent)
+        : finalContent;
+
       return new Response(JSON.stringify({
         threadId: threadId || '',
         mode,
-        content: finalContent,
+        content: contentWithFallbackNote,
         products: structured.products,
       }), { headers: corsHeaders });
     } catch (error) {

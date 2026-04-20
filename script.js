@@ -190,6 +190,42 @@ function persistSavedProducts() {
   localStorage.setItem(savedProductsStorageKey, JSON.stringify(savedProducts));
 }
 
+/* Create a stable key so the atelier can avoid duplicate products */
+function getProductDedupKey(product) {
+  if (!product) {
+    return "";
+  }
+
+  const id = String(product.id || "").trim();
+  if (id) {
+    return `id:${id}`;
+  }
+
+  const name = String(product.name || "").toLowerCase().trim();
+  const brand = String(product.brand || "").toLowerCase().trim();
+  return name ? `name:${name}|brand:${brand}` : "";
+}
+
+/* Remove duplicate products while keeping the first copy */
+function uniqueProducts(products) {
+  const unique = [];
+  const seen = new Set();
+
+  for (let i = 0; i < products.length; i += 1) {
+    const product = products[i];
+    const key = getProductDedupKey(product);
+
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(product);
+  }
+
+  return unique;
+}
+
 /* Escape user-facing text before inserting in HTML */
 function escapeHtml(text) {
   return String(text || "")
@@ -362,11 +398,15 @@ function getConversationPayload() {
 }
 
 /* Keep follow-up chat focused on routine and beauty-related topics */
-function isAllowedFollowUpTopic(message) {
+function isAllowedFollowUpTopic(message, conversationHistory = []) {
   const normalizedMessage = String(message || "").toLowerCase();
 
   if (!normalizedMessage.trim()) {
     return false;
+  }
+
+  if (hasGeneratedRoutine && conversationHistory.length > 0 && /\b(this|that|it|they|them|these|those)\b/.test(normalizedMessage)) {
+    return true;
   }
 
   const allowedKeywords = [
@@ -563,22 +603,55 @@ function renderSavedProducts() {
     return;
   }
 
-  const savedMarkup = savedProducts.length
+  const savedProductsOnly = uniqueProducts(savedProducts);
+  const selectedProductsOnly = uniqueProducts(
+    selectedProducts.filter((product) => {
+      const selectedKey = getProductDedupKey(product);
+      return selectedKey && !savedProductsOnly.some((savedProduct) => getProductDedupKey(savedProduct) === selectedKey);
+    })
+  );
+
+  const selectedMarkup = selectedProductsOnly.length
     ? `
-        <ul class="saved-products-list">
-          ${savedProducts
-            .map(
-              (product, index) => `
-                <li class="saved-product-item">
-                  <span class="saved-product-line">${index + 1}. ${product.name} - ${product.brand}</span>
-                  <button class="saved-product-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${product.name} from saved products">Remove</button>
-                </li>
-              `
-            )
-            .join("")}
-        </ul>
+        <section class="atelier-selected-section">
+          <h3 class="atelier-suggested-title">Current Selection</h3>
+          <p class="atelier-suggested-intro">These products are added to The Product Atelier now and will save when you generate a routine.</p>
+          <ul class="saved-products-list">
+            ${selectedProductsOnly
+              .map(
+                (product, index) => `
+                  <li class="saved-product-item">
+                    <span class="saved-product-line">${index + 1}. ${escapeHtml(product.name)} - ${escapeHtml(product.brand || "")}</span>
+                    <span class="atelier-status-badge">Not saved yet</span>
+                  </li>
+                `
+              )
+              .join("")}
+          </ul>
+        </section>
       `
-    : `<p class="curated-edit-empty">Saved products will appear here.</p>`;
+    : "";
+
+  const savedMarkup = savedProductsOnly.length
+    ? `
+        <section class="atelier-saved-section">
+          <h3 class="atelier-suggested-title">Saved Products</h3>
+          <p class="atelier-suggested-intro">These items stay in The Product Atelier after you generate a routine.</p>
+          <ul class="saved-products-list">
+            ${savedProductsOnly
+              .map(
+                (product, index) => `
+                  <li class="saved-product-item">
+                    <span class="saved-product-line">${index + 1}. ${product.name} - ${product.brand}</span>
+                    <button class="saved-product-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${product.name} from saved products">Remove</button>
+                  </li>
+                `
+              )
+              .join("")}
+          </ul>
+        </section>
+      `
+    : `<p class="curated-edit-empty">Selected products will appear here and save after you generate a routine.</p>`;
 
   const suggestedMarkup = suggestedRoutineProducts.length
     ? `
@@ -603,28 +676,34 @@ function renderSavedProducts() {
       `
     : "";
 
-  savedProductsGrid.innerHTML = `${savedMarkup}${suggestedMarkup}`;
+  savedProductsGrid.innerHTML = `${selectedMarkup}${savedMarkup}${suggestedMarkup}`;
 }
 
-/* Save selected products into the curated edit panel */
+/* Update the atelier preview without writing to storage yet */
 function saveSelectedProductsToCuratedEdit() {
   if (selectedProducts.length === 0) {
-    addChatMessage("ai", "Select products first, then save them to The Product Atelier.");
+    addChatMessage("ai", "Select products first, then update The Product Atelier.");
     return;
   }
 
-  const savedIds = new Set(savedProducts.map((product) => product.id));
-  const additions = selectedProducts.filter((product) => !savedIds.has(product.id));
+  renderSavedProducts();
+  addChatMessage("ai", "Your selection is now visible in The Product Atelier. It will save when you generate your routine.");
+}
+
+/* Save the current selection into the persistent atelier after routine generation */
+function commitSelectedProductsToCuratedEdit() {
+  const savedKeys = new Set(savedProducts.map((product) => getProductDedupKey(product)));
+  const additions = selectedProducts.filter((product) => {
+    const key = getProductDedupKey(product);
+    return key && !savedKeys.has(key);
+  });
 
   if (!additions.length) {
-    addChatMessage("ai", "Those products are already in The Product Atelier.");
     return;
   }
 
-  savedProducts = [...additions, ...savedProducts];
+  savedProducts = uniqueProducts([...additions, ...savedProducts]);
   persistSavedProducts();
-  renderSavedProducts();
-  addChatMessage("ai", "The Product Atelier has been updated.");
 }
 
 /* Clear the curated edit panel */
@@ -822,6 +901,7 @@ async function generatePersonalizedRoutine() {
 
     const advisorText = routineResponse.content || "Your routine is ready in the editorial timeline above.";
     suggestedRoutineProducts = Array.isArray(routineResponse.products) ? routineResponse.products : [];
+    commitSelectedProductsToCuratedEdit();
     renderSavedProducts();
     addChatMessage("ai", advisorText);
     renderRoutineEditorialSummary(advisorText);
@@ -1049,7 +1129,9 @@ chatForm.addEventListener("submit", async (e) => {
     return;
   }
 
-  if (!isAllowedFollowUpTopic(message)) {
+  const conversationHistory = getConversationPayload();
+
+  if (!isAllowedFollowUpTopic(message, conversationHistory)) {
     addChatMessage("ai", "Please keep follow-up questions focused on your generated routine, skincare, haircare, makeup, fragrance, or related beauty topics.");
     return;
   }

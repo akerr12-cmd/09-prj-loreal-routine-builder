@@ -203,6 +203,34 @@ body {
   background: linear-gradient(90deg, transparent, #e3a535, transparent);
 }
 
+/* usage guide */
+.usage-guide {
+  margin: 22px 0 18px;
+  padding: 20px 22px;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  background:
+    linear-gradient(#faf9f7, #faf9f7) padding-box,
+    linear-gradient(140deg, #e3a535, #f3e9d8) border-box;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.usage-guide h2 {
+  font-family: "Playfair Display", "Times New Roman", serif;
+  font-size: clamp(20px, 1.8vw, 24px);
+  color: #171717;
+  margin-bottom: 10px;
+}
+
+.usage-guide-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #333;
+  display: grid;
+  gap: 8px;
+  line-height: 1.5;
+}
+
 /* category filter */
 .search-controls-row {
   display: grid;
@@ -1058,6 +1086,22 @@ body {
   width: 100%;
 }
 
+.atelier-selected-section + .atelier-saved-section,
+.atelier-saved-section + .atelier-suggested-section {
+  margin-top: 18px;
+}
+
+.atelier-status-badge {
+  flex: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(255, 0, 59, 0.08);
+  color: #c3173f;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .curated-edit-empty {
   color: #666;
   font-size: 15px;
@@ -1307,6 +1351,10 @@ body {
     margin-bottom: 18px;
   }
 
+  .usage-guide {
+    padding: 18px 16px;
+  }
+
   .product-search {
     font-size: 15px;
   }
@@ -1329,6 +1377,15 @@ body {
 
   .saved-product-card {
     grid-template-columns: 28px 60px 1fr;
+  }
+
+  .saved-product-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .atelier-status-badge {
+    align-self: flex-start;
   }
 
   .saved-product-item {
