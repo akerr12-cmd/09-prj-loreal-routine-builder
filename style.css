@@ -1492,6 +1492,23 @@ body {
   }
 }
 
+@media (max-width: 425px) {
+  .search-section {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .search-section select {
+    max-width: 100%;
+    font-size: 15px;
+    padding: 14px 26px 14px 12px;
+  }
+
+  .search-section::after {
+    right: 12px;
+  }
+}
+
 @media (max-width: 380px) {
   .products-carousel {
     padding: 0 24px;
@@ -1909,7 +1926,23 @@ html[dir="rtl"] .search-section::after {
 }
 
 html[dir="rtl"] .search-section select {
-  padding: 16px 16px 16px 46px;
+  padding: 15px 16px 15px 36px;
+}
+
+@media (max-width: 560px) {
+  html[dir="rtl"] .search-section select {
+    padding: 15px 16px 15px 28px;
+  }
+}
+
+@media (max-width: 425px) {
+  html[dir="rtl"] .search-section select {
+    padding: 14px 12px 14px 26px;
+  }
+
+  html[dir="rtl"] .search-section::after {
+    left: 12px;
+  }
 }
 
 html[dir="rtl"] .product-search,

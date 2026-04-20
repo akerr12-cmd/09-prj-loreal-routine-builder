@@ -24,6 +24,7 @@ const userInput = document.getElementById("userInput");
 const apiUrl = typeof OPENAI_API_URL === "string" ? OPENAI_API_URL : "";
 
 const savedProductsStorageKey = "loreal-curated-edit";
+const selectedProductsStorageKey = "loreal-selected-products";
 
 const rtlLanguagePrefixes = ["ar", "he", "fa", "ur"];
 
@@ -234,6 +235,37 @@ function loadSavedProducts() {
 /* Save curated edit items to localStorage */
 function persistSavedProducts() {
   localStorage.setItem(savedProductsStorageKey, JSON.stringify(savedProducts));
+}
+
+/* Load active selected products from localStorage */
+function loadSelectedProducts() {
+  try {
+    const storedValue = localStorage.getItem(selectedProductsStorageKey);
+    selectedProducts = storedValue ? JSON.parse(storedValue) : [];
+  } catch (error) {
+    selectedProducts = [];
+  }
+
+  if (!Array.isArray(selectedProducts)) {
+    selectedProducts = [];
+    return;
+  }
+
+  selectedProducts = uniqueProducts(selectedProducts)
+    .map((product) => ({
+      id: product?.id,
+      name: String(product?.name || "").trim(),
+      brand: String(product?.brand || "").trim(),
+      category: String(product?.category || "").trim(),
+      description: String(product?.description || "").trim(),
+      image: String(product?.image || "").trim(),
+    }))
+    .filter((product) => product.name);
+}
+
+/* Save active selected products to localStorage */
+function persistSelectedProducts() {
+  localStorage.setItem(selectedProductsStorageKey, JSON.stringify(selectedProducts));
 }
 
 /* Create a stable key so the atelier can avoid duplicate products */
@@ -615,6 +647,7 @@ async function addSuggestedProductToRoutine(productName) {
   };
 
   selectedProducts.push(productToAdd);
+  persistSelectedProducts();
   displayProducts(currentProducts);
   updateSelectedCount();
   updateSaveSelectedButtonState();
@@ -898,6 +931,9 @@ function saveAtelierToFile() {
 
 function startNewRoutine() {
   selectedProducts = [];
+  persistSelectedProducts();
+  savedProducts = [];
+  persistSavedProducts();
   expandedProducts = [];
   suggestedRoutineProducts = [];
   conversationThreadId = "";
@@ -1067,9 +1103,11 @@ function toggleSelectedProduct(productId) {
     }
   }
 
+  persistSelectedProducts();
   displayProducts(currentProducts);
   updateSelectedCount();
   updateSaveSelectedButtonState();
+  renderSavedProducts();
 }
 
 /* Filter and display products when category changes */
@@ -1148,9 +1186,10 @@ productsContainer.addEventListener("click", (e) => {
   toggleSelectedProduct(productId);
 });
 
+loadSelectedProducts();
+loadSavedProducts();
 updateSelectedCount();
 updateSaveSelectedButtonState();
-loadSavedProducts();
 renderSavedProducts();
 updateCarouselControlsState();
 
