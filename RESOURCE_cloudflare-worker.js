@@ -156,6 +156,11 @@ export default {
         return false;
       }
 
+      // Allow users to start chatting before selecting products.
+      if (selectedProductsValue.length === 0 && conversationValue.length === 0) {
+        return true;
+      }
+
       const allowedKeywords = [
         'routine', 'step', 'order', 'morning', 'night', 'am', 'pm',
         'skincare', 'skin', 'cleanser', 'serum', 'moisturizer', 'sunscreen', 'spf', 'toner', 'mask', 'treatment',
@@ -684,17 +689,20 @@ export default {
       return normalizeProducts(candidates);
     }
 
-    function stripSuggestedProductsBlock(text) {
-      const normalized = String(text || '').replace(/\r\n/g, '\n');
-      const headingRegex = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:suggested|recommended)\s+products?\s*:?\s*(?:\*\*)?\s*\n([\s\S]*)/i;
-      const headingMatch = normalized.match(headingRegex);
+    function appendSuggestedProductsIfMissing(text, products) {
+      const cleanText = String(text || '').trim();
+      const safeProducts = Array.isArray(products) ? products.filter((item) => item && item.name) : [];
 
-      if (headingMatch) {
-        const headingIndex = normalized.indexOf(headingMatch[0]);
-        return normalized.slice(0, headingIndex).trim();
+      if (!safeProducts.length) {
+        return cleanText;
       }
 
-      return normalized.trim();
+      if (/\b(?:suggested|recommended)\s+products?\b/i.test(cleanText)) {
+        return cleanText;
+      }
+
+      const productLines = safeProducts.map((item) => `- ${item.name}`);
+      return `${cleanText}\n\nSuggested Products:\n${productLines.join('\n')}`.trim();
     }
 
     function extractStructuredPayload(text) {
@@ -733,17 +741,17 @@ export default {
             textSource = rawWithoutCandidate;
           }
 
-          const cleanAnswer = stripSuggestedProductsBlock(textSource || raw);
+          const chatAnswer = String(textSource || raw).trim();
 
-          if (cleanAnswer || products.length) {
-            return { answer: cleanAnswer || answer || raw, products };
+          if (chatAnswer || products.length) {
+            return { answer: chatAnswer || answer || raw, products };
           }
         } catch (error) {
           // Keep trying other candidate JSON snippets.
         }
       }
 
-      const cleanAnswer = stripSuggestedProductsBlock(raw);
+      const cleanAnswer = String(raw).trim();
       const sectionProducts = extractProductsFromText(raw);
       const inlineProducts = sectionProducts.length ? sectionProducts : extractInlineProductMentions(raw);
       return { answer: cleanAnswer || raw, products: inlineProducts };
@@ -784,9 +792,10 @@ export default {
       }
 
       const structured = extractStructuredPayload(responseText);
-      const finalContent = mode === 'generate_routine'
+      const baseContent = mode === 'generate_routine'
         ? enforceGenerateRoutineOpening(structured.answer || responseText)
         : (structured.answer || responseText);
+      const finalContent = appendSuggestedProductsIfMissing(baseContent, structured.products);
 
       const contentWithFallbackNote = usedFallbackMode
         ? appendFallbackNotice(finalContent)

@@ -1299,6 +1299,19 @@ body {
   line-height: 1.4;
 }
 
+.saved-product-link {
+  color: #171717;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.saved-product-link:hover,
+.saved-product-link:focus-visible {
+  color: #ff003b;
+  text-decoration-thickness: 2px;
+}
+
 .saved-product-card {
   border: 1.5px solid transparent;
   border-radius: 10px;
@@ -1380,6 +1393,35 @@ body {
   color: #666;
   font-size: 14px;
   margin-bottom: 10px;
+}
+
+.atelier-suggested-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.atelier-suggested-add-all-btn {
+  border: 1px solid rgba(227, 165, 53, 0.45);
+  background: #0d0d0d;
+  border-radius: 999px;
+  color: #e3a535;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+
+.atelier-suggested-add-all-btn:hover:not(:disabled) {
+  color: #ff003b;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.atelier-suggested-add-all-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .atelier-suggested-list {

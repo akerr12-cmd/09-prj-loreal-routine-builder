@@ -314,6 +314,25 @@ function escapeHtml(text) {
     .replace(/'/g, "&#39;");
 }
 
+/* Build a product lookup URL for links shown in The Product Atelier */
+function getProductAtelierLink(product) {
+  const explicitUrl = String(product?.url || product?.link || "").trim();
+
+  if (explicitUrl) {
+    return explicitUrl;
+  }
+
+  const brand = String(product?.brand || "").trim();
+  const name = String(product?.name || "").trim();
+  const query = [brand, name, "product"].filter(Boolean).join(" ");
+
+  if (!query) {
+    return "";
+  }
+
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
 /* Normalize product text for search matching */
 function getProductSearchText(product) {
   return `${product.name} ${product.brand} ${product.description} ${product.category}`.toLowerCase();
@@ -481,6 +500,11 @@ function isAllowedFollowUpTopic(message, conversationHistory = []) {
 
   if (!normalizedMessage.trim()) {
     return false;
+  }
+
+  // Allow the assistant to start a conversation even before products are selected.
+  if (!hasGeneratedRoutine && selectedProducts.length === 0) {
+    return true;
   }
 
   if (hasGeneratedRoutine && conversationHistory.length > 0 && /\b(this|that|it|they|them|these|those)\b/.test(normalizedMessage)) {
@@ -657,6 +681,58 @@ async function addSuggestedProductToRoutine(productName) {
   await generatePersonalizedRoutine();
 }
 
+/* Add all currently suggested products to the active routine at once */
+async function addAllSuggestedProductsToRoutine() {
+  const addableProductNames = suggestedRoutineProducts
+    .map((product) => String(product?.name || "").trim())
+    .filter((name) => name && !isProductAlreadySelectedByName(name));
+
+  if (!addableProductNames.length) {
+    addChatMessage("ai", "All suggested products are already in your routine.");
+    return;
+  }
+
+  if (!productCatalog.length) {
+    await loadProducts();
+  }
+
+  let addedCount = 0;
+
+  for (let i = 0; i < addableProductNames.length; i += 1) {
+    const productName = addableProductNames[i];
+
+    if (isProductAlreadySelectedByName(productName)) {
+      continue;
+    }
+
+    const catalogMatch = findProductByName(productName);
+    const productToAdd = catalogMatch || {
+      id: `suggested-${Date.now()}-${selectedProducts.length + addedCount + 1}`,
+      name: productName,
+      brand: "L'Oréal suggested option",
+      category: "suggested",
+      description: "Suggested by the chatbot based on your request.",
+    };
+
+    selectedProducts.push(productToAdd);
+    addedCount += 1;
+  }
+
+  if (!addedCount) {
+    addChatMessage("ai", "All suggested products are already in your routine.");
+    return;
+  }
+
+  persistSelectedProducts();
+  displayProducts(currentProducts);
+  updateSelectedCount();
+  updateSaveSelectedButtonState();
+  renderSavedProducts();
+
+  addChatMessage("ai", `${addedCount} suggested product${addedCount === 1 ? "" : "s"} were added to your routine.`);
+  await generatePersonalizedRoutine();
+}
+
 /* Keep selected count visible in the unified products area */
 function updateSelectedCount() {
   if (!selectedCountText) {
@@ -718,14 +794,19 @@ function renderSavedProducts() {
           <p class="atelier-suggested-intro">These items stay in The Product Atelier after you generate a routine.</p>
           <ul class="saved-products-list">
             ${savedProductsOnly
-              .map(
-                (product, index) => `
+              .map((product, index) => {
+                const productLabel = `${index + 1}. ${product.name} - ${product.brand || ""}`;
+                const productLink = getProductAtelierLink(product);
+
+                return `
                   <li class="saved-product-item">
-                    <span class="saved-product-line">${index + 1}. ${product.name} - ${product.brand}</span>
+                    ${productLink
+                      ? `<a class="saved-product-line saved-product-link" href="${escapeHtml(productLink)}" target="_blank" rel="noopener noreferrer">${escapeHtml(productLabel)}</a>`
+                      : `<span class="saved-product-line">${escapeHtml(productLabel)}</span>`}
                     <button class="saved-product-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${product.name} from saved products">Remove</button>
                   </li>
-                `
-              )
+                `;
+              })
               .join("")}
           </ul>
         </section>
@@ -733,10 +814,19 @@ function renderSavedProducts() {
     : `<p class="curated-edit-empty">Selected products will appear here and save after you generate a routine.</p>`;
 
   const suggestedMarkup = suggestedRoutineProducts.length
-    ? `
+    ? (() => {
+        const addableSuggestedCount = suggestedRoutineProducts.filter((product) => {
+          const productName = String(product?.name || "").trim();
+          return productName && !isProductAlreadySelectedByName(productName);
+        }).length;
+
+        return `
         <section class="atelier-suggested-section">
           <h3 class="atelier-suggested-title">Suggested Products</h3>
           <p class="atelier-suggested-intro">Add these AI suggestions to your routine with one click.</p>
+          <div class="atelier-suggested-actions">
+            <button class="atelier-suggested-add-all-btn" type="button" ${addableSuggestedCount === 0 ? "disabled" : ""}>${addableSuggestedCount === 0 ? "All Added" : `Add All (${addableSuggestedCount})`}</button>
+          </div>
           <ul class="atelier-suggested-list">
             ${suggestedRoutineProducts
               .map((product, index) => {
@@ -752,7 +842,8 @@ function renderSavedProducts() {
               .join("")}
           </ul>
         </section>
-      `
+      `;
+      })()
     : "";
 
   savedProductsGrid.innerHTML = `${selectedMarkup}${savedMarkup}${suggestedMarkup}`;
@@ -1261,6 +1352,12 @@ savedProductsGrid.addEventListener("click", (e) => {
     return;
   }
 
+  const addAllButton = e.target.closest(".atelier-suggested-add-all-btn");
+  if (addAllButton) {
+    addAllSuggestedProductsToRoutine();
+    return;
+  }
+
   const addButton = e.target.closest(".atelier-suggested-add-btn");
 
   if (!addButton) {
@@ -1282,11 +1379,6 @@ chatForm.addEventListener("submit", async (e) => {
   const message = userInput.value.trim();
 
   if (!message) {
-    return;
-  }
-
-  if (!hasGeneratedRoutine) {
-    addChatMessage("ai", "Generate your routine first, then ask follow-up questions in the chatbox.");
     return;
   }
 
