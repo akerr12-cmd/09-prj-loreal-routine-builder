@@ -515,6 +515,10 @@ function isAllowedFollowUpTopic(message, conversationHistory = []) {
     "routine",
     "step",
     "order",
+    "how",
+    "tips",
+    "application",
+    "apply",
     "morning",
     "night",
     "am",
@@ -539,6 +543,13 @@ function isAllowedFollowUpTopic(message, conversationHistory = []) {
     "makeup",
     "foundation",
     "concealer",
+    "eyeliner",
+    "eye pencil",
+    "pencil",
+    "liner",
+    "mascara",
+    "eyeshadow",
+    "brow",
     "lip",
     "blush",
     "fragrance",
@@ -555,7 +566,9 @@ function isAllowedFollowUpTopic(message, conversationHistory = []) {
     return true;
   }
 
-  return selectedProducts.some((product) => {
+  const knownProducts = [...selectedProducts, ...savedProducts, ...suggestedRoutineProducts];
+
+  return knownProducts.some((product) => {
     const name = String(product?.name || "").toLowerCase().trim();
     return name && normalizedMessage.includes(name);
   });

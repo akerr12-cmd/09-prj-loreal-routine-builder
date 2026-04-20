@@ -163,9 +163,10 @@ export default {
 
       const allowedKeywords = [
         'routine', 'step', 'order', 'morning', 'night', 'am', 'pm',
+        'how', 'tips', 'application', 'apply',
         'skincare', 'skin', 'cleanser', 'serum', 'moisturizer', 'sunscreen', 'spf', 'toner', 'mask', 'treatment',
         'haircare', 'hair', 'scalp', 'shampoo', 'conditioner',
-        'makeup', 'foundation', 'concealer', 'lip', 'blush',
+        'makeup', 'foundation', 'concealer', 'eyeliner', 'eye pencil', 'pencil', 'liner', 'mascara', 'eyeshadow', 'brow', 'lip', 'blush',
         'fragrance', 'perfume', 'scent',
         'acne', 'hydration', 'sensitive', 'dry', 'oily', 'combination',
       ];
