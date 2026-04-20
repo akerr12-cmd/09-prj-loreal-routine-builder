@@ -800,6 +800,8 @@ async function generatePersonalizedRoutine() {
   }
 
   routineOutput.innerHTML = "";
+  suggestedRoutineProducts = [];
+  renderSavedProducts();
   hasGeneratedRoutine = true;
   saveRoutineButton.disabled = false;
 
@@ -812,7 +814,6 @@ async function generatePersonalizedRoutine() {
     removeThinkingIndicator();
 
     const advisorText = routineResponse.content || "Your personalized routine note is ready.";
-    suggestedRoutineProducts = Array.isArray(routineResponse.products) ? routineResponse.products : [];
     commitSelectedProductsToCuratedEdit();
     renderSavedProducts();
     addChatMessage("ai", advisorText);
@@ -1058,8 +1059,10 @@ chatForm.addEventListener("submit", async (e) => {
     removeThinkingIndicator();
     if (Array.isArray(chatResponse.products) && chatResponse.products.length > 0) {
       suggestedRoutineProducts = chatResponse.products;
-      renderSavedProducts();
+    } else {
+      suggestedRoutineProducts = [];
     }
+    renderSavedProducts();
     addChatMessage("ai", chatResponse.content || "I can help refine your beauty routine.");
   } catch (error) {
     removeThinkingIndicator();
