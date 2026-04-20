@@ -40,8 +40,10 @@ let currentProducts = [];
 let productCatalog = [];
 let selectedProducts = [];
 let savedProducts = [];
+let suggestedRoutineProducts = [];
 let expandedProducts = [];
 let conversationThreadId = "";
+let hasGeneratedRoutine = false;
 let beautyPreferences = {
   skinType: "",
   sensitivity: false,
@@ -359,6 +361,64 @@ function getConversationPayload() {
     .filter((message) => message.content);
 }
 
+/* Keep follow-up chat focused on routine and beauty-related topics */
+function isAllowedFollowUpTopic(message) {
+  const normalizedMessage = String(message || "").toLowerCase();
+
+  if (!normalizedMessage.trim()) {
+    return false;
+  }
+
+  const allowedKeywords = [
+    "routine",
+    "step",
+    "order",
+    "morning",
+    "night",
+    "am",
+    "pm",
+    "product",
+    "cleanser",
+    "serum",
+    "moisturizer",
+    "sunscreen",
+    "spf",
+    "toner",
+    "treatment",
+    "mask",
+    "exfol",
+    "skin",
+    "skincare",
+    "hair",
+    "haircare",
+    "scalp",
+    "shampoo",
+    "conditioner",
+    "makeup",
+    "foundation",
+    "concealer",
+    "lip",
+    "blush",
+    "fragrance",
+    "perfume",
+    "scent",
+    "sensitive",
+    "acne",
+    "hydration",
+  ];
+
+  const hasKeyword = allowedKeywords.some((keyword) => normalizedMessage.includes(keyword));
+
+  if (hasKeyword) {
+    return true;
+  }
+
+  return selectedProducts.some((product) => {
+    const name = String(product?.name || "").toLowerCase().trim();
+    return name && normalizedMessage.includes(name);
+  });
+}
+
 /* Send message context to Cloudflare Worker and return assistant response */
 async function sendToRoutineAdvisor(mode, message) {
   if (!apiUrl) {
@@ -411,48 +471,71 @@ function renderRoutineEditorialSummary(summaryText) {
   routineOutput.appendChild(note);
 }
 
-/* Add AI-suggested product options below the routine timeline */
-function renderSuggestedRoutineProducts(products) {
-  const existingSection = routineOutput.querySelector(".routine-suggested-section");
-  if (existingSection) {
-    existingSection.remove();
+/* Normalize names so routine suggestions can be matched against selected products */
+function normalizeProductNameForMatch(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/* Check whether a suggested product is already part of the current routine */
+function isProductAlreadySelectedByName(productName) {
+  const normalizedName = normalizeProductNameForMatch(productName);
+
+  if (!normalizedName) {
+    return false;
   }
 
-  if (!Array.isArray(products) || products.length === 0) {
+  return selectedProducts.some((product) => normalizeProductNameForMatch(product.name) === normalizedName);
+}
+
+/* Find the closest catalog product so the added suggestion uses real product metadata */
+function findProductByName(productName) {
+  const normalizedName = normalizeProductNameForMatch(productName);
+
+  if (!normalizedName) {
+    return null;
+  }
+
+  return productCatalog.find((product) => normalizeProductNameForMatch(product.name) === normalizedName) || null;
+}
+
+/* Add a suggested product into the active routine */
+async function addSuggestedProductToRoutine(productName) {
+  const normalizedName = normalizeProductNameForMatch(productName);
+
+  if (!normalizedName) {
     return;
   }
 
-  const section = document.createElement("article");
-  section.className = "routine-suggested-section";
+  if (!productCatalog.length) {
+    await loadProducts();
+  }
 
-  const title = document.createElement("h3");
-  title.className = "routine-suggested-title";
-  title.textContent = "Suggested Products";
+  if (isProductAlreadySelectedByName(normalizedName)) {
+    addChatMessage("ai", `${productName} is already in your routine.`);
+    return;
+  }
 
-  const intro = document.createElement("p");
-  intro.className = "routine-suggested-intro";
-  intro.textContent = "Additional L'Oréal options the advisor recommends for this routine.";
+  const catalogMatch = findProductByName(productName);
+  const productToAdd = catalogMatch || {
+    id: `suggested-${Date.now()}-${selectedProducts.length + 1}`,
+    name: productName,
+    brand: "L'Oréal suggested option",
+    category: "suggested",
+    description: "Suggested by the chatbot based on your request.",
+  };
 
-  const list = document.createElement("div");
-  list.className = "routine-suggested-list";
+  selectedProducts.push(productToAdd);
+  displayProducts(currentProducts);
+  updateSelectedCount();
+  updateSaveSelectedButtonState();
+  renderSavedProducts();
 
-  products.forEach((product, index) => {
-    const item = document.createElement("article");
-    item.className = "routine-suggested-item";
-    item.dataset.productName = product.name;
-
-    const name = document.createElement("p");
-    name.className = "routine-suggested-name";
-    name.textContent = `${index + 1}. ${product.name}`;
-
-    item.appendChild(name);
-    list.appendChild(item);
-  });
-
-  section.appendChild(title);
-  section.appendChild(intro);
-  section.appendChild(list);
-  routineOutput.appendChild(section);
+  addChatMessage("ai", `${productToAdd.name} has been added to your routine.`);
+  await generatePersonalizedRoutine();
 }
 
 /* Keep selected count visible in the unified products area */
@@ -480,25 +563,47 @@ function renderSavedProducts() {
     return;
   }
 
-  if (savedProducts.length === 0) {
-    savedProductsGrid.innerHTML = `
-      <p class="curated-edit-empty">Saved products will appear here.</p>
-    `;
-    return;
-  }
-
-  savedProductsGrid.innerHTML = savedProducts
-    .map(
-      (product, index) => `
-        <li class="saved-product-item">
-          <span class="saved-product-line">${index + 1}. ${product.name} - ${product.brand}</span>
-          <button class="saved-product-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${product.name} from saved products">Remove</button>
-        </li>
+  const savedMarkup = savedProducts.length
+    ? `
+        <ul class="saved-products-list">
+          ${savedProducts
+            .map(
+              (product, index) => `
+                <li class="saved-product-item">
+                  <span class="saved-product-line">${index + 1}. ${product.name} - ${product.brand}</span>
+                  <button class="saved-product-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${product.name} from saved products">Remove</button>
+                </li>
+              `
+            )
+            .join("")}
+        </ul>
       `
-    )
-    .join("");
+    : `<p class="curated-edit-empty">Saved products will appear here.</p>`;
 
-  savedProductsGrid.innerHTML = `<ul class="saved-products-list">${savedProductsGrid.innerHTML}</ul>`;
+  const suggestedMarkup = suggestedRoutineProducts.length
+    ? `
+        <section class="atelier-suggested-section">
+          <h3 class="atelier-suggested-title">Suggested Products</h3>
+          <p class="atelier-suggested-intro">Add these AI suggestions to your routine with one click.</p>
+          <ul class="atelier-suggested-list">
+            ${suggestedRoutineProducts
+              .map((product, index) => {
+                const productName = String(product?.name || "").trim();
+                const isAdded = isProductAlreadySelectedByName(productName);
+                return `
+                  <li class="atelier-suggested-item">
+                    <span class="atelier-suggested-line">${index + 1}. ${escapeHtml(productName)}</span>
+                    <button class="atelier-suggested-add-btn" type="button" data-product-name="${escapeHtml(productName)}" ${isAdded ? "disabled" : ""}>${isAdded ? "Added to Routine" : "Add to Routine"}</button>
+                  </li>
+                `;
+              })
+              .join("")}
+          </ul>
+        </section>
+      `
+    : "";
+
+  savedProductsGrid.innerHTML = `${savedMarkup}${suggestedMarkup}`;
 }
 
 /* Save selected products into the curated edit panel */
@@ -574,11 +679,10 @@ function getRoutineTextForSave() {
     lines.push("");
   });
 
-  const suggestedItems = routineOutput.querySelectorAll(".routine-suggested-item");
-  if (suggestedItems.length) {
+  if (suggestedRoutineProducts.length) {
     lines.push("Suggested Products");
-    suggestedItems.forEach((item, index) => {
-      const name = String(item.dataset.productName || "").trim();
+    suggestedRoutineProducts.forEach((item, index) => {
+      const name = String(item?.name || "").trim();
       if (name) {
         lines.push(`${index + 1}. ${name}`);
       }
@@ -705,6 +809,7 @@ async function generatePersonalizedRoutine() {
         .join("")}
     </div>
   `;
+  hasGeneratedRoutine = true;
   saveRoutineButton.disabled = false;
 
   try {
@@ -716,7 +821,8 @@ async function generatePersonalizedRoutine() {
     removeThinkingIndicator();
 
     const advisorText = routineResponse.content || "Your routine is ready in the editorial timeline above.";
-    renderSuggestedRoutineProducts(routineResponse.products || []);
+    suggestedRoutineProducts = Array.isArray(routineResponse.products) ? routineResponse.products : [];
+    renderSavedProducts();
     addChatMessage("ai", advisorText);
     renderRoutineEditorialSummary(advisorText);
   } catch (error) {
@@ -908,12 +1014,20 @@ clearSavedProductsButton.addEventListener("click", () => {
 /* Handle individual remove button clicks in curated edit */
 savedProductsGrid.addEventListener("click", (e) => {
   const removeButton = e.target.closest(".saved-product-remove-btn");
-  if (!removeButton) {
+  if (removeButton) {
+    const productId = Number(removeButton.dataset.id);
+    removeSavedProduct(productId);
     return;
   }
 
-  const productId = Number(removeButton.dataset.id);
-  removeSavedProduct(productId);
+  const addButton = e.target.closest(".atelier-suggested-add-btn");
+
+  if (!addButton) {
+    return;
+  }
+
+  const productName = addButton.dataset.productName || "";
+  addSuggestedProductToRoutine(productName);
 });
 
 /* Save button downloads current routine */
@@ -930,6 +1044,16 @@ chatForm.addEventListener("submit", async (e) => {
     return;
   }
 
+  if (!hasGeneratedRoutine) {
+    addChatMessage("ai", "Generate your routine first, then ask follow-up questions in the chatbox.");
+    return;
+  }
+
+  if (!isAllowedFollowUpTopic(message)) {
+    addChatMessage("ai", "Please keep follow-up questions focused on your generated routine, skincare, haircare, makeup, fragrance, or related beauty topics.");
+    return;
+  }
+
   addChatMessage("user", message);
   updateBeautyPreferencesFromMessage(message);
   userInput.value = "";
@@ -938,6 +1062,10 @@ chatForm.addEventListener("submit", async (e) => {
     showThinkingIndicator();
     const chatResponse = await sendToRoutineAdvisor("follow_up", message);
     removeThinkingIndicator();
+    if (Array.isArray(chatResponse.products) && chatResponse.products.length > 0) {
+      suggestedRoutineProducts = chatResponse.products;
+      renderSavedProducts();
+    }
     addChatMessage("ai", chatResponse.content || "I can help refine your beauty routine.");
   } catch (error) {
     removeThinkingIndicator();

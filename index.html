@@ -35,31 +35,33 @@
         </div>
       </header>
 
-      <!-- Category Filter -->
-      <div class="search-section">
-        <select id="categoryFilter">
-          <option value="" disabled selected>Choose a Category</option>
-          <option value="cleanser">Cleansers</option>
-          <option value="moisturizer">Moisturizers & Treatments</option>
-          <option value="haircare">Haircare</option>
-          <option value="makeup">Makeup</option>
-          <option value="hair color">Hair Color</option>
-          <option value="hair styling">Hair Styling</option>
-          <option value="men's grooming">Men's Grooming</option>
-          <option value="suncare">Suncare</option>
-          <option value="fragrance">Fragrance</option>
-        </select>
-      </div>
+      <div class="search-controls-row">
+        <!-- Category Filter -->
+        <div class="search-section">
+          <select id="categoryFilter">
+            <option value="" disabled selected>Choose a Category</option>
+            <option value="cleanser">Cleansers</option>
+            <option value="moisturizer">Moisturizers & Treatments</option>
+            <option value="haircare">Haircare</option>
+            <option value="makeup">Makeup</option>
+            <option value="hair color">Hair Color</option>
+            <option value="hair styling">Hair Styling</option>
+            <option value="men's grooming">Men's Grooming</option>
+            <option value="suncare">Suncare</option>
+            <option value="fragrance">Fragrance</option>
+          </select>
+        </div>
 
-      <div class="search-bar-wrap">
-        <label for="productSearch" class="visually-hidden">Search the collection</label>
-        <input
-          id="productSearch"
-          class="product-search"
-          type="search"
-          placeholder="Search the collection…"
-          autocomplete="off"
-        />
+        <div class="search-bar-wrap">
+          <label for="productSearch" class="visually-hidden">Search the collection</label>
+          <input
+            id="productSearch"
+            class="product-search"
+            type="search"
+            placeholder="Search the collection…"
+            autocomplete="off"
+          />
+        </div>
       </div>
 
       <!-- Products Carousel -->
@@ -93,17 +95,6 @@
         </div>
       </section>
 
-      <!-- Personalized Routine Output -->
-      <section class="routine-section">
-        <h2>Your Personalized Routine</h2>
-        <div id="routineOutput" class="routine-output">
-          <p class="routine-placeholder">Select products and generate your routine to see your editorial flow.</p>
-        </div>
-        <button id="saveRoutineBtn" class="save-routine-btn" type="button" disabled>
-          <i class="fa-regular fa-bookmark"></i> Save Routine
-        </button>
-      </section>
-
       <!------- Chat Area ------->
       <section class="chatbox">
         <h2>Let's Build Your Routine</h2>
@@ -124,6 +115,17 @@
             <span class="visually-hidden">Send</span>
           </button>
         </form>
+      </section>
+
+      <!-- Personalized Routine Output -->
+      <section class="routine-section">
+        <h2>Your Personalized Routine</h2>
+        <div id="routineOutput" class="routine-output">
+          <p class="routine-placeholder">Select products and generate your routine to see your editorial flow.</p>
+        </div>
+        <button id="saveRoutineBtn" class="save-routine-btn" type="button" disabled>
+          <i class="fa-regular fa-bookmark"></i> Save Routine
+        </button>
       </section>
 
       <!------- Footer Links ------->

@@ -51,6 +51,14 @@ export default {
       return new Response(JSON.stringify({ error: { message: 'Missing user message.' } }), { status: 400, headers: corsHeaders });
     }
 
+    if (mode === 'follow_up' && !isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog)) {
+      return new Response(JSON.stringify({
+        error: {
+          message: 'Follow-up questions must be about your generated routine or beauty topics like skincare, haircare, makeup, and fragrance.',
+        },
+      }), { status: 400, headers: corsHeaders });
+    }
+
     const openAiHeaders = {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
@@ -141,6 +149,47 @@ export default {
       return getRelevantCatalogMatches(userPrompt, products).length === 0;
     }
 
+    function isAllowedFollowUpTopic(userPrompt, selectedProductsValue, catalogValue) {
+      const promptText = normalizeTextForSearch(userPrompt);
+
+      if (!promptText) {
+        return false;
+      }
+
+      const allowedKeywords = [
+        'routine', 'step', 'order', 'morning', 'night', 'am', 'pm',
+        'skincare', 'skin', 'cleanser', 'serum', 'moisturizer', 'sunscreen', 'spf', 'toner', 'mask', 'treatment',
+        'haircare', 'hair', 'scalp', 'shampoo', 'conditioner',
+        'makeup', 'foundation', 'concealer', 'lip', 'blush',
+        'fragrance', 'perfume', 'scent',
+        'acne', 'hydration', 'sensitive', 'dry', 'oily', 'combination',
+      ];
+
+      const hasKeywordMatch = allowedKeywords.some((keyword) => promptText.includes(keyword));
+
+      if (hasKeywordMatch) {
+        return true;
+      }
+
+      const knownNames = [];
+
+      for (let i = 0; i < selectedProductsValue.length; i += 1) {
+        knownNames.push(normalizeTextForSearch(selectedProductsValue[i].name));
+      }
+
+      for (let i = 0; i < catalogValue.length; i += 1) {
+        knownNames.push(normalizeTextForSearch(catalogValue[i].name));
+      }
+
+      for (let i = 0; i < knownNames.length; i += 1) {
+        if (knownNames[i] && promptText.includes(knownNames[i])) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
     function buildChatMessages(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
       const messages = [
         {
@@ -211,7 +260,6 @@ export default {
       }
 
       return messages
-        .slice(-12)
         .map((item) => ({
           role: item?.role === 'assistant' ? 'assistant' : 'user',
           content: String(item?.content || '').trim(),
@@ -249,6 +297,8 @@ export default {
       lines.push('Do not begin with any greeting or preface. Line 2 must begin the routine steps or section headers.');
       lines.push('When mode=generate_routine, include a final "Suggested Products" section with 2 to 4 additional L\'Oréal product options that fit the user request.');
       lines.push('Format the suggested products as bullet points with the exact product name and one short reason.');
+      lines.push('When mode=follow_up and the user asks for recommendations, include a "Suggested Products" section with 2 to 4 bullet points.');
+      lines.push('Each suggested bullet should start with the product name, followed by a short reason.');
       lines.push('When the user asks for a cleanser or any product recommendation, first prioritize specific products from product_catalog_json that match the user concern.');
       lines.push('If product_catalog_json lacks a good match, provide up to 2 clearly labeled general alternatives by product type or ingredients (not fake brand/product names).');
       lines.push('When suggesting catalog items, use product_catalog_json names exactly.');
