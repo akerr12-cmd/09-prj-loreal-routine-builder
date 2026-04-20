@@ -12,15 +12,40 @@ body {
   display: flex;
   justify-content: center;
   min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
   background:
-    radial-gradient(circle at top, rgba(227, 165, 53, 0.12), transparent 34%),
-    linear-gradient(180deg, #fbfaf7 0%, #f4f0e8 100%);
+    linear-gradient(145deg, rgba(227, 165, 53, 0.1), rgba(227, 165, 53, 0) 42%),
+    radial-gradient(circle at top, rgba(227, 165, 53, 0.16), transparent 36%),
+    linear-gradient(180deg, #f8f5f0 0%, #f2ede3 100%);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: 
+    radial-gradient(circle, rgba(42, 42, 42, 0.25) 1px, transparent 1.2px),
+    radial-gradient(circle, rgba(227, 165, 53, 0.18) 0.6px, transparent 0.9px),
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 2px,
+      rgba(227, 165, 53, 0.04) 2px,
+      rgba(227, 165, 53, 0.04) 4px
+    );
+  background-size: 4px 4px, 8px 8px, 16px 16px;
+  background-position: 0 0, 1px 1px, 2px 2px;
+  opacity: 0.12;
+}
+
 .page-wrapper {
   position: relative;
+  z-index: 1;
   width: min(94%, 1100px);
   padding: 24px 0 56px;
 }
@@ -472,9 +497,24 @@ body {
 
 .chatbox h2 {
   font-family: "Playfair Display", "Times New Roman", serif;
-  font-size: clamp(22px, 2vw, 28px);
-  margin-bottom: 18px;
+  font-size: clamp(25px, 2.25vw, 33px);
+  margin-bottom: 26px;
   color: #161616;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  position: relative;
+  padding-bottom: 10px;
+}
+
+.chatbox h2::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100px;
+  height: 1px;
+  background: linear-gradient(90deg, #e3a535, #2a2a2a 85%);
 }
 
 .chat-window {
@@ -609,7 +649,7 @@ body {
   outline: none;
   box-shadow:
     0 10px 26px rgba(0, 0, 0, 0.08),
-    inset 0 -2px 0 #ff003b;
+    inset 0 0 0 1px #e3a535;
 }
 
 .chat-form input::placeholder {
@@ -690,7 +730,7 @@ body {
 /* products carousel */
 .products-carousel {
   position: relative;
-  margin: 18px 0 30px;
+  margin: 22px 0 52px;
   padding: 0 46px;
 }
 
@@ -737,7 +777,7 @@ body {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(280px, calc((100% - 40px) / 3));
-  gap: 20px;
+  gap: 24px;
   overflow-x: auto;
   overflow-y: visible;
   scroll-snap-type: x mandatory;
@@ -769,17 +809,15 @@ body {
 }
 
 .product-card {
-  border: 1.5px solid transparent;
+  border: 1px solid #e6e6e6;
   padding: 15px;
   border-radius: 10px;
   display: flex;
   flex-direction: column;
   gap: 0;
   min-height: 160px;
-  background:
-    linear-gradient(#faf9f7, #faf9f7) padding-box,
-    linear-gradient(135deg, #e3a535, #f3e9d8) border-box;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  background: #fbfaf7;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.06);
   position: relative;
   overflow: visible;
   isolation: isolate;
@@ -853,8 +891,11 @@ body {
 }
 
 .product-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+  transform: translateY(-3px);
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.11),
+    0 0 0 1px rgba(227, 165, 53, 0.7),
+    0 0 18px rgba(227, 165, 53, 0.18);
 }
 
 .product-card.search-dim {
@@ -1165,7 +1206,7 @@ body {
 
 /* products actions under unified grid */
 .products-actions {
-  margin: 4px 0 28px;
+  margin: 12px 0 52px;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -1195,7 +1236,9 @@ body {
 
 .save-selected-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.08),
+    0 0 12px rgba(227, 165, 53, 0.22);
 }
 
 .save-selected-btn:disabled {
@@ -1206,14 +1249,27 @@ body {
 }
 
 .curated-edit-section {
-  margin: 0 0 24px;
+  margin: 0 0 56px;
   padding: 24px;
+  position: relative;
+  overflow: hidden;
   border: 1.5px solid transparent;
   border-radius: 12px;
   background:
-    linear-gradient(#faf9f7, #faf9f7) padding-box,
+    linear-gradient(125deg, rgba(227, 165, 53, 0.09), rgba(227, 165, 53, 0) 28%) padding-box,
+    linear-gradient(#faf8f3, #f7f3eb) padding-box,
     linear-gradient(140deg, #e3a535, #f3e9d8) border-box;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+}
+
+.curated-edit-section::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 18px;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(227, 165, 53, 0), #e3a535 20%, #e3a535 80%, rgba(227, 165, 53, 0));
 }
 
 .curated-edit-header {
@@ -1221,13 +1277,38 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 24px;
 }
 
 .curated-edit-header h2 {
   font-family: "Playfair Display", "Times New Roman", serif;
-  font-size: 22px;
+  font-size: 26px;
   color: #171717;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  position: relative;
+  padding-right: 14px;
+}
+
+.curated-edit-header h2::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: #e3a535;
+}
+
+.atelier-selected-section {
+  background:
+    radial-gradient(circle at 18% 15%, rgba(227, 165, 53, 0.08), transparent 35%),
+    linear-gradient(#faf8f4, #f8f3ea);
+  border-radius: 10px;
+  padding: 14px 14px 8px;
 }
 
 .clear-all-btn {
@@ -1384,9 +1465,12 @@ body {
 
 .atelier-suggested-title {
   font-family: "Playfair Display", "Times New Roman", serif;
-  font-size: 18px;
+  font-size: 21px;
   color: #171717;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .atelier-suggested-intro {
@@ -1688,6 +1772,8 @@ body {
 
 .generate-btn:hover {
   transform: translateY(-1px);
+  background: linear-gradient(90deg, #0d0d0d 0%, #1a1711 55%, #2a2115 100%);
+  box-shadow: 0 0 18px rgba(227, 165, 53, 0.24);
 }
 
 .generate-btn i {
@@ -1713,7 +1799,7 @@ body {
 
 /* routine timeline section */
 .routine-section {
-  margin: 0 0 32px;
+  margin: 0 0 56px;
   padding: 26px;
   border: 1.5px solid transparent;
   border-radius: 12px;
@@ -1725,9 +1811,24 @@ body {
 
 .routine-section h2 {
   font-family: "Playfair Display", "Times New Roman", serif;
-  font-size: clamp(22px, 2vw, 28px);
-  margin-bottom: 20px;
+  font-size: clamp(25px, 2.25vw, 33px);
+  margin-bottom: 26px;
   color: #161616;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  position: relative;
+  padding-bottom: 10px;
+}
+
+.routine-section h2::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100px;
+  height: 1px;
+  background: linear-gradient(90deg, #e3a535, #2a2a2a 85%);
 }
 
 .routine-output {
