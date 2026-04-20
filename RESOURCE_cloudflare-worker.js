@@ -754,12 +754,11 @@ export default {
 
       const cleanAnswer = String(raw).trim();
       const sectionProducts = extractProductsFromText(raw);
-      const inlineProducts = sectionProducts.length ? sectionProducts : extractInlineProductMentions(raw);
-      return { answer: cleanAnswer || raw, products: inlineProducts };
+      return { answer: cleanAnswer || raw, products: sectionProducts };
     }
 
     try {
-      const shouldSearchWeb = shouldUseWebSearch(assistantPrompt, productCatalog);
+      const shouldSearchWeb = mode === 'follow_up' && shouldUseWebSearch(assistantPrompt, productCatalog);
       let responseText;
       let usedFallbackMode = false;
 
@@ -796,7 +795,9 @@ export default {
       const baseContent = mode === 'generate_routine'
         ? enforceGenerateRoutineOpening(structured.answer || responseText)
         : (structured.answer || responseText);
-      const finalContent = appendSuggestedProductsIfMissing(baseContent, structured.products);
+      const finalContent = mode === 'follow_up'
+        ? appendSuggestedProductsIfMissing(baseContent, structured.products)
+        : baseContent;
 
       const contentWithFallbackNote = usedFallbackMode
         ? appendFallbackNotice(finalContent)

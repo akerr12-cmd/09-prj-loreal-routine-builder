@@ -614,6 +614,19 @@ async function sendToRoutineAdvisor(mode, message) {
 }
 
 /* Add the AI-generated routine summary below the visual timeline */
+function stripSuggestedProductsFromRoutineText(text) {
+  const normalized = String(text || "").replace(/\r\n/g, "\n");
+  const headingRegex = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:suggested|recommended)\s+products?\s*:?\s*(?:\*\*)?\s*\n([\s\S]*)/i;
+  const headingMatch = normalized.match(headingRegex);
+
+  if (headingMatch) {
+    const headingIndex = normalized.indexOf(headingMatch[0]);
+    return normalized.slice(0, headingIndex).trim();
+  }
+
+  return normalized.trim();
+}
+
 function renderRoutineEditorialSummary(summaryText) {
   const existingSummary = routineOutput.querySelector(".routine-ai-note");
   if (existingSummary) {
@@ -622,7 +635,7 @@ function renderRoutineEditorialSummary(summaryText) {
 
   const note = document.createElement("article");
   note.className = "routine-ai-note";
-  note.textContent = summaryText;
+  note.textContent = stripSuggestedProductsFromRoutineText(summaryText);
   routineOutput.appendChild(note);
 }
 
