@@ -22,6 +22,38 @@ export default {
       : 'gpt-4.1';
     const apiBase = 'https://api.openai.com/v1';
 
+    let assistantInstructionsCache = null;
+
+    async function getAssistantInstructions() {
+      if (!assistantId) {
+        return '';
+      }
+
+      if (assistantInstructionsCache !== null) {
+        return assistantInstructionsCache;
+      }
+
+      try {
+        const response = await fetch(`${apiBase}/assistants/${assistantId}`, {
+          method: 'GET',
+          headers: openAiHeaders,
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          assistantInstructionsCache = '';
+          return '';
+        }
+
+        assistantInstructionsCache = typeof data?.instructions === 'string' ? data.instructions.trim() : '';
+        return assistantInstructionsCache;
+      } catch (error) {
+        assistantInstructionsCache = '';
+        return '';
+      }
+    }
+
     let requestBody;
     try {
       requestBody = await request.json();
@@ -214,11 +246,11 @@ export default {
       return `${cleanText}\n\nNote: sources unavailable in fallback mode.`.trim();
     }
 
-    function buildChatMessages(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+    async function buildChatMessages(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
       const messages = [
         {
           role: 'system',
-          content: buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary),
+          content: await buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary),
         },
       ];
 
@@ -243,7 +275,7 @@ export default {
         headers: openAiHeaders,
         body: JSON.stringify({
           model: openAiModel,
-          messages: buildChatMessages(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
+          messages: await buildChatMessages(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
         }),
       });
 
@@ -291,11 +323,18 @@ export default {
         .filter((item) => item.content);
     }
 
-    function buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary) {
+    async function buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary) {
+      const assistantInstructions = await getAssistantInstructions();
       const lines = [
         'Runtime context from app:',
-        `mode=${modeValue}`,
       ];
+
+      if (assistantInstructions) {
+        lines.push('assistant_instructions=');
+        lines.push(assistantInstructions);
+      }
+
+      lines.push(`mode=${modeValue}`);
 
       if (productsValue.length) {
         lines.push('selected_products_json=' + JSON.stringify(productsValue));
@@ -323,6 +362,9 @@ export default {
       lines.push('Format the suggested products as bullet points with the exact product name and one short reason.');
       lines.push('When mode=follow_up and the user asks for recommendations, include a "Suggested Products" section with 2 to 4 bullet points.');
       lines.push('Each suggested bullet should start with the product name, followed by a short reason.');
+      lines.push('When mode=follow_up, end the response with exactly one short, specific follow-up question.');
+      lines.push('The follow-up question must relate to the user\'s routine, concern, product preference, or time of day.');
+      lines.push('Do not end with a generic closing like "Let me know if you need anything else."');
       lines.push('When the user asks for a cleanser or any product recommendation, first prioritize specific products from product_catalog_json that match the user concern.');
       lines.push('If product_catalog_json lacks a good match, provide up to 2 clearly labeled general alternatives by product type or ingredients (not fake brand/product names).');
       lines.push('When suggesting catalog items, use product_catalog_json names exactly.');
@@ -331,11 +373,17 @@ export default {
       return lines.join('\n');
     }
 
-    function buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+    async function buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt) {
+      const assistantInstructions = await getAssistantInstructions();
       const lines = [
         'User request: ' + userPrompt,
         'Mode: ' + modeValue,
       ];
+
+      if (assistantInstructions) {
+        lines.push('Assistant instructions:');
+        lines.push(assistantInstructions);
+      }
 
       if (productsValue.length) {
         lines.push('Selected products JSON: ' + JSON.stringify(productsValue));
@@ -445,6 +493,7 @@ export default {
                 {
                   type: 'input_text',
                   text: buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary),
+                                  text: await buildRuntimeInstructions(modeValue, productsValue, conversationValue, preferenceSummary),
                 },
               ],
             },
@@ -453,7 +502,8 @@ export default {
               content: [
                 {
                   type: 'input_text',
-                  text: buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
+                  text: await buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
+                                  text: await buildWebSearchPrompt(modeValue, productsValue, conversationValue, preferenceSummary, userPrompt),
                 },
               ],
             },
@@ -706,6 +756,24 @@ export default {
       return `${cleanText}\n\nSuggested Products:\n${productLines.join('\n')}`.trim();
     }
 
+    function appendFollowUpQuestionIfMissing(text, modeValue) {
+      if (modeValue !== 'follow_up') {
+        return String(text || '').trim();
+      }
+
+      const cleanText = String(text || '').trim();
+
+      if (!cleanText) {
+        return 'What would you like to adjust next?';
+      }
+
+      if (/[?？]\s*$/.test(cleanText)) {
+        return cleanText;
+      }
+
+      return `${cleanText}\n\nWhat would you like to adjust next?`;
+    }
+
     function extractStructuredPayload(text) {
       const raw = String(text || '').trim();
 
@@ -799,9 +867,11 @@ export default {
         ? appendSuggestedProductsIfMissing(baseContent, structured.products)
         : baseContent;
 
+      const contentWithFollowUp = appendFollowUpQuestionIfMissing(finalContent, mode);
+
       const contentWithFallbackNote = usedFallbackMode
-        ? appendFallbackNotice(finalContent)
-        : finalContent;
+        ? appendFallbackNotice(contentWithFollowUp)
+        : contentWithFollowUp;
 
       return new Response(JSON.stringify({
         threadId: threadId || '',
