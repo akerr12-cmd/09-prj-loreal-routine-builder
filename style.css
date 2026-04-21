@@ -2290,8 +2290,8 @@ html[dir="rtl"] .chatbox {
 
 /* Mobile Sticky Chat Bar */
 @media (max-width: 991px) {
-  .consultation-active .chatbox {
-    /* Add padding to the bottom of the chat window so content isn't hidden by the sticky form */
+  body.consultation-active {
+    /* Add padding to the bottom of the page to create space for the sticky chat form */
     padding-bottom: 90px;
   }
 
