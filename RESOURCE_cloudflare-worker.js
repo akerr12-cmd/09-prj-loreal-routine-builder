@@ -205,11 +205,6 @@ export default {
         return false;
       }
 
-      // Allow users to start chatting before selecting products.
-      if (selectedProductsValue.length === 0 && conversationValue.length === 0) {
-        return true;
-      }
-
       const allowedKeywords = [
         'routine', 'step', 'order', 'morning', 'night', 'am', 'pm',
         'how', 'tips', 'application', 'apply',
@@ -414,11 +409,15 @@ export default {
       }
 
       lines.push('Instructions:');
-      lines.push('- Search the web for current L\'Oréal products that match the user request.');
-      lines.push('- Prefer L\'Oréal official pages or trustworthy retailers when possible.');
-      lines.push('- Return 2 to 4 relevant L\'Oréal product suggestions if catalog matching is weak or missing.');
-      lines.push('- Do not invent product names.');
-      lines.push('- Include source URLs at the end as plain text under a Sources section.');
+      lines.push('- Your entire response must be a single JSON object with two keys: "answer" and "products".');
+      lines.push('- "answer" must be a string containing a conversational reply to the user.');
+      lines.push('- "products" must be an array of objects, where each object represents a suggested L\'Oréal product.');
+      lines.push('- Each product object must have a "name" (string) and an "image" (string, a direct URL to a product photo).');
+      lines.push('- Search the web to find 2-4 relevant L\'Oréal products. Prefer official L\'Oréal pages or trustworthy retailers.');
+      lines.push('- For each product, you MUST provide a direct URL to a high-quality product photo in the "image" field.');
+      lines.push('- Do not suggest a product if you cannot find an image for it.');
+      lines.push('- Do not invent product names or image URLs.');
+      lines.push('- Append any source URLs you used to the end of the "answer" text under a "Sources:" heading.');
 
       return lines.join('\n');
     }
@@ -587,6 +586,7 @@ export default {
         const name = typeof item === 'string'
           ? cleanProductName(item)
           : cleanProductName(item.name || '');
+        const image = typeof item.image === 'string' && item.image.trim() ? item.image.trim() : '';
 
         if (!name) {
           continue;
@@ -598,7 +598,7 @@ export default {
         }
 
         seen.add(dedupeKey);
-        cleaned.push({ name });
+        cleaned.push({ name, image });
 
         if (cleaned.length >= 3) {
           break;
@@ -831,32 +831,46 @@ export default {
 
     // Step 10: Run the model call (web-search first when needed, otherwise chat completion).
     try {
+      const isTopicAllowed = isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog, conversation);
+
+      // Enforce strict topic boundaries for all follow-up questions.
+      // If the prompt is off-topic, return a hardcoded redirection message
+      // instead of calling the AI. This is more reliable than system instructions alone.
+      if (mode === 'follow_up' && !isTopicAllowed) {
+        return new Response(JSON.stringify({
+          threadId: threadId || '',
+          mode,
+          content: 'That’s a thoughtful question, though I’m here specifically for beauty and routine guidance. How can I help with your skincare, haircare, or makeup routine?',
+          products: [],
+          debug: {
+            instructionsSource,
+            assistantInstructionsLoaded: Boolean(loadedAssistantInstructions),
+            assistantInstructionsLength: loadedAssistantInstructions.length,
+            assistantIdConfigured: Boolean(assistantId),
+            assistantFetchStatus,
+            assistantFetchError,
+            usedWebSearch: false,
+            usedFallbackMode: false,
+          },
+        }), { headers: corsHeaders });
+      }
+
       // Only use web search for in-scope beauty follow-ups so unrelated prompts are handled by assistant instructions.
-      const shouldSearchWeb = mode === 'follow_up'
-        && isAllowedFollowUpTopic(assistantPrompt, selectedProducts, productCatalog, conversation)
-        && shouldUseWebSearch(assistantPrompt, productCatalog);
+      const shouldSearchWeb = mode === 'follow_up' && isTopicAllowed && shouldUseWebSearch(assistantPrompt, productCatalog);
       let responseText;
       let usedFallbackMode = false;
 
       if (shouldSearchWeb) {
-        try {
-          responseText = await createWebSearchCompletion(
-            mode,
-            selectedProducts,
-            conversation,
-            preferences,
-            assistantPrompt
-          );
-        } catch (searchError) {
-          usedFallbackMode = true;
-          responseText = await createChatCompletion(
-            mode,
-            selectedProducts,
-            conversation,
-            preferences,
-            assistantPrompt
-          );
-        }
+        // When web search is needed, call the specific completion endpoint for it.
+        // If this fails, the main try/catch will handle the error, preventing
+        // a fallback to a non-web-search model that can't fulfill the request.
+        responseText = await createWebSearchCompletion(
+          mode,
+          selectedProducts,
+          conversation,
+          preferences,
+          assistantPrompt
+        );
       } else {
         responseText = await createChatCompletion(
           mode,

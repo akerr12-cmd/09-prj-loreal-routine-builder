@@ -838,18 +838,20 @@ function renderSavedProducts() {
         <section class="atelier-selected-section">
           <h3 class="atelier-suggested-title">Current Selection</h3>
           <p class="atelier-suggested-intro">These products are added to The Product Atelier now and will save when you generate a routine.</p>
-          <ul class="saved-products-list">
+          <div class="atelier-card-row">
             ${selectedProductsOnly
-              .map(
-                (product, index) => `
-                  <li class="saved-product-item">
-                    <span class="saved-product-line">${index + 1}. ${escapeHtml(product.name)} - ${escapeHtml(product.brand || "")}</span>
+               .map((product) => {
+                 const productLink = getProductAtelierLink(product);
+                 return `
+                  <div class="atelier-card">
+                    ${product.image ? `<img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" class="atelier-card-img">` : '<div class="atelier-card-img-placeholder"></div>'}
+                    <a href="${escapeHtml(productLink)}" target="_blank" rel="noopener noreferrer" class="atelier-card-name">${escapeHtml(product.name)}</a>
                     <span class="atelier-status-badge">Not saved yet</span>
-                  </li>
-                `
-              )
-              .join("")}
-          </ul>
+                  </div>
+                `;
+               })
+               .join("")}
+          </div>
         </section>
       `
     : "";
@@ -859,23 +861,22 @@ function renderSavedProducts() {
         <section class="atelier-saved-section">
           <h3 class="atelier-suggested-title">Saved Products</h3>
           <p class="atelier-suggested-intro">These items stay in The Product Atelier after you generate a routine.</p>
-          <ul class="saved-products-list">
+          <div class="atelier-card-row">
             ${savedProductsOnly
-              .map((product, index) => {
-                const productLabel = `${index + 1}. ${product.name} - ${product.brand || ""}`;
-                const productLink = getProductAtelierLink(product);
-
-                return `
-                  <li class="saved-product-item">
-                    ${productLink
-                      ? `<a class="saved-product-line saved-product-link" href="${escapeHtml(productLink)}" target="_blank" rel="noopener noreferrer">${escapeHtml(productLabel)}</a>`
-                      : `<span class="saved-product-line">${escapeHtml(productLabel)}</span>`}
-                    <button class="saved-product-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${product.name} from saved products">Remove</button>
-                  </li>
+               .map((product) => {
+                 const productLink = getProductAtelierLink(product);
+                 return `
+                  <div class="atelier-card">
+                    <button class="atelier-card-remove-btn" type="button" data-id="${product.id}" aria-label="Remove ${escapeHtml(product.name)} from saved products">
+                      <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    </button>
+                    ${product.image ? `<img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" class="atelier-card-img">` : '<div class="atelier-card-img-placeholder"></div>'}
+                    <a href="${escapeHtml(productLink)}" target="_blank" rel="noopener noreferrer" class="atelier-card-name">${escapeHtml(product.name)}</a>
+                  </div>
                 `;
-              })
-              .join("")}
-          </ul>
+               })
+               .join("")}
+          </div>
         </section>
       `
     : `<p class="curated-edit-empty">Selected products will appear here and save after you generate a routine.</p>`;
@@ -890,24 +891,29 @@ function renderSavedProducts() {
         return `
         <section class="atelier-suggested-section">
           <h3 class="atelier-suggested-title">Suggested Products</h3>
-          <p class="atelier-suggested-intro">Add these AI suggestions to your routine with one click.</p>
+          <p class="atelier-suggested-intro">The AI has suggested these products. Add them to your routine below.</p>
           <div class="atelier-suggested-actions">
             <button class="atelier-suggested-add-all-btn" type="button" ${addableSuggestedCount === 0 ? "disabled" : ""}>${addableSuggestedCount === 0 ? "All Added" : `Add All (${addableSuggestedCount})`}</button>
           </div>
-          <ul class="atelier-suggested-list">
+          <div class="atelier-card-row">
             ${suggestedRoutineProducts
-              .map((product, index) => {
+              .map((product) => {
                 const productName = String(product?.name || "").trim();
+                const productImage = String(product?.image || "").trim();
                 const isAdded = isProductAlreadySelectedByName(productName);
+                const productLink = getProductAtelierLink(product);
                 return `
-                  <li class="atelier-suggested-item">
-                    <span class="atelier-suggested-line">${index + 1}. ${escapeHtml(productName)}</span>
-                    <button class="atelier-suggested-add-btn" type="button" data-product-name="${escapeHtml(productName)}" ${isAdded ? "disabled" : ""}>${isAdded ? "Added to Routine" : "Add to Routine"}</button>
-                  </li>
+                  <div class="atelier-card suggested-product-card ${isAdded ? 'is-added' : ''}">
+                    ${productImage ? `<img src="${escapeHtml(productImage)}" alt="${escapeHtml(productName)}" class="atelier-card-img">` : '<div class="atelier-card-img-placeholder"></div>'}
+                    <a href="${escapeHtml(productLink)}" target="_blank" rel="noopener noreferrer" class="atelier-card-name">${escapeHtml(productName)}</a>
+                    <button class="atelier-suggested-add-btn" type="button" data-product-name="${escapeHtml(productName)}" ${isAdded ? "disabled" : ""}>
+                      <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                      <span>${isAdded ? "Added" : "Add"}</span>
+                    </button>
+                  </div>
                 `;
               })
               .join("")}
-          </ul>
         </section>
       `;
       })()
@@ -1429,7 +1435,7 @@ clearSavedProductsButton.addEventListener("click", () => {
 
 /* Handle individual remove button clicks in curated edit */
 savedProductsGrid.addEventListener("click", (e) => {
-  const removeButton = e.target.closest(".saved-product-remove-btn");
+  const removeButton = e.target.closest(".atelier-card-remove-btn");
   if (removeButton) {
     const productId = Number(removeButton.dataset.id);
     removeSavedProduct(productId);
