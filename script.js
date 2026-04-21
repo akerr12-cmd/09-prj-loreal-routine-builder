@@ -731,14 +731,22 @@ async function addSuggestedProductToRoutine(productName, productImage) {
   }
 
   const catalogMatch = findProductByName(productName);
-  const productToAdd = catalogMatch || {
-    id: `suggested-${Date.now()}-${selectedProducts.length + 1}`,
-    name: productName,
-    brand: "L'Oréal suggested option",
-    category: "suggested",
-    description: "Suggested by the chatbot based on your request.",
-    image: productImage || "",
-  };
+  // If a catalog match is found, use it as a base. Otherwise, create a new object.
+  const productToAdd = catalogMatch
+    ? { ...catalogMatch }
+    : {
+        id: `suggested-${Date.now()}-${selectedProducts.length + 1}`,
+        name: productName,
+        brand: "L'Oréal suggested option",
+        category: "suggested",
+        description: "Suggested by the chatbot based on your request.",
+      };
+
+  // Always prioritize the image from the AI web search if it exists.
+  // This ensures the image the user saw is the one that gets added.
+  productToAdd.image = productImage || productToAdd.image || "";
+  // Also ensure the name is exactly what the user saw in the suggestion.
+  productToAdd.name = productName;
 
   selectedProducts.push(productToAdd);
   persistSelectedProducts();
@@ -773,20 +781,25 @@ async function addAllSuggestedProductsToRoutine() {
   for (let i = 0; i < addableProducts.length; i += 1) {
     const suggestedProduct = addableProducts[i];
     const productName = String(suggestedProduct?.name || "").trim();
+    const productImage = String(suggestedProduct?.image || "").trim();
 
     if (isProductAlreadySelectedByName(productName)) {
       continue;
     }
 
     const catalogMatch = findProductByName(productName);
-    const productToAdd = catalogMatch || {
-      id: `suggested-${Date.now()}-${selectedProducts.length + addedCount + 1}`,
-      name: productName,
-      brand: "L'Oréal suggested option",
-      category: "suggested",
-      description: "Suggested by the chatbot based on your request.",
-      image: suggestedProduct?.image || "",
-    };
+    const productToAdd = catalogMatch
+      ? { ...catalogMatch }
+      : {
+          id: `suggested-${Date.now()}-${selectedProducts.length + addedCount + 1}`,
+          name: productName,
+          brand: "L'Oréal suggested option",
+          category: "suggested",
+          description: "Suggested by the chatbot based on your request.",
+        };
+
+    productToAdd.image = productImage || productToAdd.image || "";
+    productToAdd.name = productName;
 
     selectedProducts.push(productToAdd);
     addedCount += 1;
