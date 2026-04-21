@@ -1,2 +1,2 @@
-# Secrets file containing API keys
-secrets.js
+# The secrets.js file in this project only contains the public worker URL, not private API keys.
+# It is safe and necessary to commit this file for the live site to function.
