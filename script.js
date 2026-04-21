@@ -1558,6 +1558,9 @@ chatForm.addEventListener("submit", async (e) => {
   } catch (error) {
     // Step 6: Show a clear fallback message if the request fails.
     removeThinkingIndicator();
+    // Clear any previous suggestions, as this request failed.
+    suggestedRoutineProducts = [];
+    renderSavedProducts();
     addChatMessage("ai", `I couldn't connect to the routine advisor right now. ${error.message}`);
   }
 });
