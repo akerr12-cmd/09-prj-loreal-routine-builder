@@ -66,6 +66,7 @@ let suppressProductClickOnce = false;
 let hasCarouselDragMoved = false;
 let isMenuOpen = false;
 let isInstructionsOpen = false;
+let isConsultationLayoutActive = false;
 
 /* Scroll product carousel by one card track */
 function scrollProductCarousel(direction) {
@@ -633,18 +634,24 @@ function stripSuggestedProductsFromRoutineText(text) {
   return normalized.trim();
 }
 
+/* Render the AI routine summary as a series of horizontally scrollable cards */
 function renderRoutineEditorialSummary(summaryText) {
   const placeholder = routineOutput.querySelector(".routine-placeholder");
   if (placeholder) {
     placeholder.remove();
   }
-
-  // Find and remove the previous AI-generated note to avoid duplicating content.
+ 
+  // Clear all previous routine content (notes, steps, etc.) to prevent duplication.
   const existingNote = routineOutput.querySelector(".routine-ai-note");
   if (existingNote) {
     existingNote.remove();
   }
-
+  const existingSteps = routineOutput.querySelector(".routine-steps-container");
+  if (existingSteps) {
+    existingSteps.remove();
+  }
+ 
+  // Revert to the single-block display for the routine summary.
   const note = document.createElement("article");
   note.className = "routine-ai-note";
   note.textContent = stripSuggestedProductsFromRoutineText(summaryText);
@@ -707,7 +714,7 @@ function findProductByName(productName) {
 }
 
 /* Add a suggested product into the active routine */
-async function addSuggestedProductToRoutine(productName) {
+async function addSuggestedProductToRoutine(productName, productImage) {
   const normalizedName = normalizeProductNameForMatch(productName);
 
   if (!normalizedName) {
@@ -730,6 +737,7 @@ async function addSuggestedProductToRoutine(productName) {
     brand: "L'Oréal suggested option",
     category: "suggested",
     description: "Suggested by the chatbot based on your request.",
+    image: productImage || "",
   };
 
   selectedProducts.push(productToAdd);
@@ -746,11 +754,12 @@ async function addSuggestedProductToRoutine(productName) {
 
 /* Add all currently suggested products to the active routine at once */
 async function addAllSuggestedProductsToRoutine() {
-  const addableProductNames = suggestedRoutineProducts
-    .map((product) => String(product?.name || "").trim())
-    .filter((name) => name && !isProductAlreadySelectedByName(name));
+  const addableProducts = suggestedRoutineProducts.filter((product) => {
+    const productName = String(product?.name || "").trim();
+    return productName && !isProductAlreadySelectedByName(productName);
+  });
 
-  if (!addableProductNames.length) {
+  if (!addableProducts.length) {
     addChatMessage("ai", "All suggested products are already in your routine.");
     return;
   }
@@ -761,8 +770,9 @@ async function addAllSuggestedProductsToRoutine() {
 
   let addedCount = 0;
 
-  for (let i = 0; i < addableProductNames.length; i += 1) {
-    const productName = addableProductNames[i];
+  for (let i = 0; i < addableProducts.length; i += 1) {
+    const suggestedProduct = addableProducts[i];
+    const productName = String(suggestedProduct?.name || "").trim();
 
     if (isProductAlreadySelectedByName(productName)) {
       continue;
@@ -775,6 +785,7 @@ async function addAllSuggestedProductsToRoutine() {
       brand: "L'Oréal suggested option",
       category: "suggested",
       description: "Suggested by the chatbot based on your request.",
+      image: suggestedProduct?.image || "",
     };
 
     selectedProducts.push(productToAdd);
@@ -906,7 +917,7 @@ function renderSavedProducts() {
                   <div class="atelier-card suggested-product-card ${isAdded ? 'is-added' : ''}">
                     ${productImage ? `<img src="${escapeHtml(productImage)}" alt="${escapeHtml(productName)}" class="atelier-card-img">` : '<div class="atelier-card-img-placeholder"></div>'}
                     <a href="${escapeHtml(productLink)}" target="_blank" rel="noopener noreferrer" class="atelier-card-name">${escapeHtml(productName)}</a>
-                    <button class="atelier-suggested-add-btn" type="button" data-product-name="${escapeHtml(productName)}" ${isAdded ? "disabled" : ""}>
+                    <button class="atelier-suggested-add-btn" type="button" data-product-name="${escapeHtml(productName)}" data-product-image="${escapeHtml(productImage)}" ${isAdded ? "disabled" : ""}>
                       <i class="fa-solid fa-plus" aria-hidden="true"></i>
                       <span>${isAdded ? "Added" : "Add"}</span>
                     </button>
@@ -974,7 +985,6 @@ function removeSavedProduct(productId) {
 /* Build routine text for download */
 function getRoutineTextForSave() {
   const aiSummary = routineOutput.querySelector(".routine-ai-note")?.textContent?.trim() || "";
-
   if (!aiSummary) {
     return "";
   }
@@ -1113,6 +1123,23 @@ function startNewRoutine() {
     categoryFilter.value = "";
   }
 
+  // Revert consultation layout if it's active
+  if (isConsultationLayoutActive) {
+    const consultationWrapper = document.querySelector(".consultation-layout");
+    if (consultationWrapper) {
+      const chatbox = consultationWrapper.querySelector(".chatbox");
+      const routineSection = consultationWrapper.querySelector(".routine-section");
+
+      // Move elements back out to their original parent
+      if (chatbox) consultationWrapper.parentNode.insertBefore(chatbox, consultationWrapper);
+      if (routineSection) consultationWrapper.parentNode.insertBefore(routineSection, consultationWrapper);
+
+      consultationWrapper.remove();
+    }
+    document.body.classList.remove("consultation-active");
+    isConsultationLayoutActive = false;
+  }
+
   if (productSearch) {
     productSearch.value = "";
   }
@@ -1138,6 +1165,31 @@ function startNewRoutine() {
   updateCarouselControlsState();
   renderSavedProducts();
   closeMenu();
+}
+
+/* Set up the two-column "consultation" layout for desktop */
+function setupConsultationLayout() {
+  if (isConsultationLayoutActive) {
+    return document.querySelector(".consultation-layout");
+  }
+
+  const chatbox = document.querySelector(".chatbox");
+  const routineSection = document.querySelector(".routine-section");
+
+  if (!chatbox || !routineSection) {
+    return null;
+  }
+
+  const consultationWrapper = document.createElement("div");
+  consultationWrapper.className = "consultation-layout";
+
+  chatbox.parentNode.insertBefore(consultationWrapper, chatbox);
+  consultationWrapper.appendChild(chatbox);
+  consultationWrapper.appendChild(routineSection);
+
+  document.body.classList.add("consultation-active");
+  isConsultationLayoutActive = true;
+  return consultationWrapper;
 }
 
 /* Render personalized routine as AI note only */
@@ -1171,6 +1223,9 @@ async function generatePersonalizedRoutine() {
     );
     removeThinkingIndicator();
 
+    // Set up the split-pane layout for the first time
+    const consultationWrapper = setupConsultationLayout();
+
     // Step 4: Commit selected products to saved list after successful generation.
     const advisorText = routineResponse.content || "Your personalized routine note is ready.";
     commitSelectedProductsToCuratedEdit();
@@ -1180,6 +1235,11 @@ async function generatePersonalizedRoutine() {
     addChatMessage("ai", advisorText);
     renderRoutineQuestionContext();
     renderRoutineEditorialSummary(advisorText);
+
+    // Auto-scroll to the new layout
+    if (consultationWrapper) {
+      consultationWrapper.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   } catch (error) {
     // Step 6: Provide a friendly error if generation fails.
     removeThinkingIndicator();
@@ -1455,7 +1515,8 @@ savedProductsGrid.addEventListener("click", (e) => {
   }
 
   const productName = addButton.dataset.productName || "";
-  addSuggestedProductToRoutine(productName);
+  const productImage = addButton.dataset.productImage || "";
+  addSuggestedProductToRoutine(productName, productImage);
 });
 
 /* Save button downloads current routine */
@@ -1491,10 +1552,9 @@ chatForm.addEventListener("submit", async (e) => {
       suggestedRoutineProducts = [];
     }
 
-    // Step 5: Render assistant answer in both chat stream and routine panel summary.
+    // Step 5: Render assistant answer in the chat stream. The routine panel is not updated on follow-ups.
     renderSavedProducts();
     addChatMessage("ai", chatResponse.content || "I can help refine your beauty routine.");
-    renderRoutineEditorialSummary(chatResponse.content || "I can help refine your beauty routine.");
   } catch (error) {
     // Step 6: Show a clear fallback message if the request fails.
     removeThinkingIndicator();

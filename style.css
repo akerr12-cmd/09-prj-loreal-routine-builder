@@ -1952,12 +1952,29 @@ body::before {
   margin-top: 16px;
   padding: 14px 16px;
   border-radius: 10px;
-  background: #0d0d0d;
-  color: #f7f4ee;
-  border-left: 2px solid #e3a535;
+  background: #f7f4ee;
+  color: #0d0d0d;
+  border-left: 2px solid #ff003b;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
   white-space: pre-line;
   line-height: 1.45;
+  max-height: 280px; /* Match chat window height */
+  overflow-y: auto; /* Enable vertical scroll */
+}
+
+/* Custom scrollbar for the routine note */
+.routine-ai-note::-webkit-scrollbar {
+  width: 8px;
+}
+
+.routine-ai-note::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
+}
+
+.routine-ai-note::-webkit-scrollbar-thumb {
+  background: rgba(227, 165, 53, 0.8);
+  border-radius: 10px;
 }
 
 .save-routine-btn {
@@ -2224,6 +2241,77 @@ html[dir="rtl"] .chatbox {
 }
 
 /* ==========================================================================
+   17. Consultation Layout (Phase 2)
+   ========================================================================== */
+
+.consultation-layout {
+  display: block; /* Default for mobile */
+}
+
+/* Desktop split-pane view */
+@media (min-width: 992px) {
+  .consultation-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    position: relative;
+    margin-top: 24px;
+  }
+
+  /* Visual connector line */
+  .consultation-layout::after {
+    content: "";
+    display: block;
+    position: absolute;
+    left: 50%;
+    top: -24px;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 24px;
+    background: linear-gradient(180deg, rgba(227, 165, 53, 0), #e3a535 80%);
+    opacity: 0.7;
+  }
+
+  .consultation-layout > .chatbox {
+    flex: 1 1 45%;
+    max-width: 45%;
+    position: sticky; /* Sticky chatbox on the left */
+    top: 24px;
+    margin-bottom: 0;
+  }
+
+  .consultation-layout > .routine-section {
+    flex: 1 1 55%;
+    max-width: 55%;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+}
+
+/* Mobile Sticky Chat Bar */
+@media (max-width: 991px) {
+  .consultation-active .chatbox {
+    /* Add padding to the bottom of the chat window so content isn't hidden by the sticky form */
+    padding-bottom: 90px;
+  }
+
+  .consultation-active .chat-form {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    padding: 12px;
+    background: #f8f5f0;
+    border-top: 1.5px solid #e3a535;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    margin-top: 0;
+    border-radius: 0;
+  }
+}
+
+/* ==========================================================================
    16. Product Atelier Cards
    ========================================================================== */
 
@@ -2279,6 +2367,8 @@ html[dir="rtl"] .chatbox {
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Ensure long product names without spaces can wrap */
+  overflow-wrap: break-word;
   min-height: 34px;
 }
 
